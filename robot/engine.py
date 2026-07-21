@@ -46,6 +46,7 @@ class RobotEngine:
         self.operation_lock = threading.Lock()
         self.used_signal_keys: set[tuple] = set()
         self.negative_at_33_marks: set[tuple[str, int]] = set()
+        self.positive_at_33_marks: set[tuple[str, int]] = set()
         self.trade_thread: threading.Thread | None = None
         self.scan_deadline = 0.0
         self.last_green_time = "-"
@@ -170,6 +171,8 @@ class RobotEngine:
             key = (asset.name, int(candle.timestamp))
             if key in self.negative_at_33_marks:
                 candle.negative_at_33 = True
+            if key in self.positive_at_33_marks:
+                candle.positive_at_33 = True
 
         current = asset.current_candle
         if not current or current.closed:
@@ -179,6 +182,9 @@ class RobotEngine:
         if elapsed >= 33 and current.close < current.open:
             self.negative_at_33_marks.add(key)
             current.negative_at_33 = True
+        if elapsed >= 33 and current.close > current.open:
+            self.positive_at_33_marks.add(key)
+            current.positive_at_33 = True
 
     def find_best_signal(self, mark_used: bool = True) -> Signal | None:
         signals: list[tuple[Signal, tuple]] = []

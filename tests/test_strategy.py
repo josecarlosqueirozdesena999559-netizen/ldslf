@@ -11,6 +11,7 @@ def candle(
     wickless: bool = False,
     update_timestamp: int | None = None,
     negative_at_33: bool = False,
+    positive_at_33: bool = False,
 ) -> Candle:
     open_price = 1.0
     close_price = 2.0 if color == "GREEN" else 0.5
@@ -22,6 +23,7 @@ def candle(
         timestamp=timestamp,
         update_timestamp=update_timestamp,
         negative_at_33=negative_at_33,
+        positive_at_33=positive_at_33,
     )
 
 
@@ -155,6 +157,33 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
     def test_negative_at_33_strategy_requires_negative_marker(self) -> None:
         candles = [candle("RED", index) for index in range(3)]
         candles.append(candle("GREEN", 3))
+        asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
+
+        self.assertIsNone(generate_signal(asset))
+
+    def test_positive_at_33_then_red_close_after_three_same_color_signals_put(self) -> None:
+        candles = [candle("GREEN", index) for index in range(3)]
+        candles.append(candle("RED", 3, positive_at_33=True))
+        asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
+
+        signal = generate_signal(asset)
+
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal.direction, "PUT")
+        self.assertEqual(signal.max_entries, 3)
+        self.assertIsNone(signal.entry_second)
+        self.assertIn("positivo aos 33s", signal.pattern)
+
+    def test_positive_at_33_strategy_requires_three_previous_same_color_candles(self) -> None:
+        candles = [candle("GREEN", 0), candle("RED", 1), candle("GREEN", 2)]
+        candles.append(candle("RED", 3, positive_at_33=True))
+        asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
+
+        self.assertIsNone(generate_signal(asset))
+
+    def test_positive_at_33_strategy_requires_positive_marker(self) -> None:
+        candles = [candle("GREEN", index) for index in range(3)]
+        candles.append(candle("RED", 3))
         asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
 
         self.assertIsNone(generate_signal(asset))

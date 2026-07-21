@@ -20,6 +20,7 @@ STRATEGY_PATTERN_MARKERS = (
     "operar contra tendencia nas velas 5, 6 e 7",
     "comprar no segundo 33",
     "negativo aos 33s e fechou verde positivo",
+    "positivo aos 33s e fechou vermelho negativo",
 )
 
 
@@ -239,11 +240,15 @@ def describe_negative_33_green_close_watch(asset: Asset) -> str | None:
         if count >= 3:
             if getattr(current, "negative_at_33", False):
                 return f"33 negativo marcado apos {count} candles da mesma cor"
+            if getattr(current, "positive_at_33", False):
+                return f"33 positivo marcado apos {count} candles da mesma cor"
             current_second = int(current.update_timestamp or current.timestamp) - int(current.timestamp)
             if current_second < 33:
                 return f"Aguardando 33s apos {count} candles da mesma cor"
             if current.close < current.open:
                 return f"Candle negativo aos 33s apos {count} candles da mesma cor"
+            if current.close > current.open:
+                return f"Candle positivo aos 33s apos {count} candles da mesma cor"
     return None
 
 
@@ -400,6 +405,30 @@ def detect_negative_33_green_close_call(asset: Asset) -> tuple[str | None, str, 
     return "CALL", pattern, "GREEN"
 
 
+def detect_positive_33_red_close_put(asset: Asset) -> tuple[str | None, str, str | None]:
+    closed = [candle for candle in asset.candles if candle.closed]
+    if len(closed) < 4:
+        return None, "Aguardando 3 candles iguais e candle de virada", None
+
+    anchor_index = len(closed) - 1
+    anchor = closed[anchor_index]
+    if candle_color(anchor) != "RED":
+        return None, "Aguardando candle fechar vermelho negativo", candle_color(anchor)
+    if not getattr(anchor, "positive_at_33", False):
+        return None, "Aguardando candle que estava positivo aos 33s", "RED"
+
+    previous_color, previous_count = previous_same_color_count(closed, anchor_index)
+    if previous_count < 3 or previous_color == "DOJI":
+        return None, "Aguardando 3 candles ou mais da mesma cor antes da virada", previous_color
+
+    label = "verdes" if previous_color == "GREEN" else "vermelhos"
+    pattern = (
+        f"{previous_count} candles {label}; candle estava positivo aos 33s "
+        "e fechou vermelho negativo; PUT com duas reentradas se necessario"
+    )
+    return "PUT", pattern, "RED"
+
+
 def collect_strategy_signals(asset: Asset) -> list[Signal]:
     signals: list[Signal] = []
 
@@ -430,6 +459,19 @@ def collect_strategy_signals(asset: Asset) -> list[Signal]:
         )
 
     direction, pattern, sequence_color = detect_negative_33_green_close_call(asset)
+    if direction:
+        signals.append(
+            make_signal(
+                asset,
+                direction,
+                pattern,
+                sequence_color,
+                NEGATIVE_33_GREEN_CLOSE_WINDOW_SECONDS,
+                max_entries=3,
+            )
+        )
+
+    direction, pattern, sequence_color = detect_positive_33_red_close_put(asset)
     if direction:
         signals.append(
             make_signal(
