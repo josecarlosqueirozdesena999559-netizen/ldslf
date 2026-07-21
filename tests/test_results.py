@@ -1,5 +1,7 @@
 import unittest
+from unittest.mock import patch
 
+from models.settings import BotSettings
 from models.trade import TradeResult
 from robot.executor import TradeExecutor
 from web_main import WebBot
@@ -49,6 +51,27 @@ class ResultAccountingTests(unittest.TestCase):
         self.assertEqual(bot.session_wins, 0)
         self.assertEqual(bot.session_losses, 1)
         self.assertEqual(bot.session_results[0]["result"], "LOSS")
+
+    def test_entry_after_open_grace_is_blocked(self) -> None:
+        executor = object.__new__(TradeExecutor)
+        executor.logger = DummyLogger()
+        executor.current_trade = ""
+
+        with patch("robot.executor.time.time", return_value=70):
+            allowed = executor.ensure_candle_open_entry(BotSettings(timeframe="M1"))
+
+        self.assertFalse(allowed)
+        self.assertIn("Entrada atrasada ignorada", executor.current_trade)
+
+    def test_entry_inside_open_grace_is_allowed(self) -> None:
+        executor = object.__new__(TradeExecutor)
+        executor.logger = DummyLogger()
+        executor.current_trade = ""
+
+        with patch("robot.executor.time.time", return_value=62):
+            allowed = executor.ensure_candle_open_entry(BotSettings(timeframe="M1"))
+
+        self.assertTrue(allowed)
 
 
 if __name__ == "__main__":

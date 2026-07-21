@@ -12,6 +12,7 @@ from storage.history import HistoryStore
 
 
 DEFAULT_STRATEGY_WINDOW_SECONDS = 300
+ENTRY_OPEN_GRACE_SECONDS = 3
 
 
 class TradeExecutor:
@@ -98,7 +99,8 @@ class TradeExecutor:
             platform_direction = "call" if direction == "CALL" else "put"
             self.current_trade = f"ENTRADA {direction} {signal.asset} {signal.pattern} {attempt_name(step)} R$ {value:.2f}"
             self.logger.info("[TRADE] sinal=%s plataforma=%s ativo=%s valor=%.2f", direction, platform_direction, signal.asset, value)
-            self.wait_entry_second(signal)
+            if not self.wait_entry_time(signal, settings):
+                return last_trade
             elapsed = (datetime.now() - signal.timestamp).total_seconds()
             if elapsed >= window_seconds:
                 window_minutes = max(1, int(window_seconds // 60))
@@ -222,6 +224,22 @@ class TradeExecutor:
         wait = seconds - (now % seconds)
         if wait > 2:
             time.sleep(wait)
+
+    def wait_entry_time(self, signal: Signal, settings: BotSettings) -> bool:
+        entry_second = getattr(signal, "entry_second", None)
+        if entry_second is None:
+            return self.ensure_candle_open_entry(settings)
+        self.wait_entry_second(signal)
+        return True
+
+    def ensure_candle_open_entry(self, settings: BotSettings) -> bool:
+        duration_seconds = {"M1": 60, "M5": 300, "M15": 900}[settings.timeframe]
+        candle_second = int(time.time()) % duration_seconds
+        if candle_second <= ENTRY_OPEN_GRACE_SECONDS:
+            return True
+        self.current_trade = f"Entrada atrasada ignorada ({candle_second}s); aguardando proximo sinal"
+        self.logger.info("[TRADE] entrada ignorada por atraso: %ss do candle", candle_second)
+        return False
 
     def wait_entry_second(self, signal: Signal) -> None:
         entry_second = getattr(signal, "entry_second", None)
