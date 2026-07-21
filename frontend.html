@@ -62,6 +62,7 @@
     table { width: 100%; border-collapse: collapse; }
     th, td { padding: 8px 10px; border-bottom: 1px solid #1b2d42; text-align: left; white-space: nowrap; font-size: 13px; font-weight: 400; }
     th { color: #a8c1d5; font-size: 12px; font-weight: 600; }
+    tr.hot td { background: rgba(16, 185, 129, .08); }
     .hidden { display: none !important; }
     .green { color: var(--green); }
     .red { color: var(--red); }
@@ -447,6 +448,12 @@
             <h3>Operação atual</h3>
             <div id="trade" class="trade-box">Nenhuma operação</div>
           </div>
+          <div class="panel wide">
+            <h3>Ativos monitorados</h3>
+            <div class="table-wrap">
+              <table><thead><tr><th>Ativo</th><th>Payout</th><th>Cor</th><th>Sequência</th><th>Padrão</th></tr></thead><tbody id="monitoredAssets"></tbody></table>
+            </div>
+          </div>
         </div>
       </section>
     </main>
@@ -714,6 +721,10 @@
         const move = Number(c.move || 0);
         return `<tr><td>${c.time}</td><td><span class="badge ${cls}">${colorLabel(c.color)}</span></td><td>${c.status}</td><td>${fmt(c.price)}</td><td class="${move >= 0 ? "green" : "red"}">${move.toFixed(6)}</td></tr>`;
       }).join("");
+      $("monitoredAssets").innerHTML = (data.monitored_assets || []).map(a => {
+        const cls = colorClass(a.color);
+        return `<tr class="${a.hot ? "hot" : ""}"><td><strong>${a.asset}</strong></td><td>${a.payout}%</td><td><span class="badge ${cls}">${colorLabel(a.color)}</span></td><td>${a.sequence || "-"}</td><td>${a.signal || "-"}</td></tr>`;
+      }).join("");
       drawChart(data.candles);
     }
 
@@ -804,16 +815,25 @@
       svg.innerHTML = "";
       if (!candles || !candles.length) return;
       const visible = candles.slice(-12);
-      const values = visible.flatMap(c => [Number(c.high), Number(c.low), Number(c.open), Number(c.price)]).filter(Number.isFinite);
-      if (!values.length) return;
-      const rawMin = Math.min(...values);
-      const rawMax = Math.max(...values);
-      const range = (rawMax - rawMin) || Math.max(Math.abs(rawMax) * 0.00008, 0.0001);
-      const min = rawMin - range * 0.18;
-      const max = rawMax + range * 0.18;
+      const bodyValues = visible.flatMap(c => [Number(c.open), Number(c.price)]).filter(Number.isFinite);
+      if (!bodyValues.length) return;
+      const sortedBodies = [...bodyValues].sort((a, b) => a - b);
+      const median = sortedBodies[Math.floor(sortedBodies.length / 2)] || sortedBodies[0] || 1;
+      const bodyMin = Math.min(...bodyValues);
+      const bodyMax = Math.max(...bodyValues);
+      const bodyRange = Math.max(bodyMax - bodyMin, Math.abs(median) * 0.00008, 0.0001);
+      const rawMin = bodyMin - bodyRange * 0.65;
+      const rawMax = bodyMax + bodyRange * 0.65;
+      const wickValues = visible.flatMap(c => [Number(c.high), Number(c.low)]).filter(v => Number.isFinite(v) && v >= rawMin && v <= rawMax);
+      const minBase = wickValues.length ? Math.min(bodyMin, ...wickValues) : bodyMin;
+      const maxBase = wickValues.length ? Math.max(bodyMax, ...wickValues) : bodyMax;
+      const range = Math.max(maxBase - minBase, bodyRange);
+      const min = minBase - range * 0.18;
+      const max = maxBase + range * 0.18;
       const chart = { left: 42, right: 852, top: 22, bottom: 282 };
       const height = chart.bottom - chart.top;
-      const y = (v) => chart.bottom - ((Number(v) - min) / (max - min)) * height;
+      const clamp = (v) => Math.max(min, Math.min(max, Number(v)));
+      const y = (v) => chart.bottom - ((clamp(v) - min) / (max - min)) * height;
       const step = (chart.right - chart.left) / Math.max(1, visible.length);
       const ns = "http://www.w3.org/2000/svg";
       for (let i = 0; i < 6; i++) {

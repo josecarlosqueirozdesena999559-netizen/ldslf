@@ -15,6 +15,29 @@ MA21_WICKLESS_WINDOW_SECONDS = 600
 MA21_GREEN_BUY_WINDOW_SECONDS = 300
 
 
+def make_signal(
+    asset: Asset,
+    direction: str,
+    pattern: str,
+    sequence_color: str | None,
+    window_seconds: int,
+    max_entries: int = 3,
+    entry_second: int | None = None,
+) -> Signal:
+    return Signal(
+        asset=asset.name,
+        active_id=asset.active_id,
+        payout=asset.payout,
+        pattern=pattern,
+        direction=direction,
+        sequence_color=sequence_color or "-",
+        timestamp=datetime.now(),
+        strategy_window_seconds=window_seconds,
+        max_entries=max_entries,
+        entry_second=entry_second,
+    )
+
+
 def candle_color(candle: Candle) -> str:
     if candle.close > candle.open:
         return "GREEN"
@@ -312,37 +335,44 @@ def detect_ma21_green_buy_at_33(asset: Asset) -> tuple[str | None, str, str | No
     return "CALL", pattern, "GREEN"
 
 
+def collect_strategy_signals(asset: Asset) -> list[Signal]:
+    signals: list[Signal] = []
+
+    direction, pattern, sequence_color = detect_eight_candle_reversal(asset)
+    if direction:
+        signals.append(make_signal(asset, direction, pattern, sequence_color, REVERSAL_WINDOW_SECONDS))
+
+    direction, pattern, sequence_color = detect_eight_candle_continuation(asset)
+    if direction:
+        signals.append(make_signal(asset, direction, pattern, sequence_color, CONTINUATION_WINDOW_SECONDS))
+
+    direction, pattern, sequence_color = detect_ma21_red_wickless_green_continuation(asset)
+    if direction:
+        signals.append(make_signal(asset, direction, pattern, sequence_color, MA21_WICKLESS_WINDOW_SECONDS))
+
+    direction, pattern, sequence_color = detect_ma21_green_buy_at_33(asset)
+    if direction:
+        signals.append(
+            make_signal(
+                asset,
+                direction,
+                pattern,
+                sequence_color,
+                MA21_GREEN_BUY_WINDOW_SECONDS,
+                max_entries=2,
+                entry_second=33,
+            )
+        )
+
+    return signals
+
+
 def generate_signal(asset: Asset) -> Signal | None:
     latest_color, latest_count, latest_sequence = describe_latest_sequence(asset)
     asset.sequence = latest_sequence if latest_count else "Aguardando"
     asset.signal = describe_strategy_watch(asset)
-    window_seconds = REVERSAL_WINDOW_SECONDS
-    max_entries = 3
-    entry_second = None
-    direction, pattern, sequence_color = detect_eight_candle_reversal(asset)
-    if not direction:
-        direction, pattern, sequence_color = detect_eight_candle_continuation(asset)
-        window_seconds = CONTINUATION_WINDOW_SECONDS
-    if not direction:
-        direction, pattern, sequence_color = detect_ma21_red_wickless_green_continuation(asset)
-        window_seconds = MA21_WICKLESS_WINDOW_SECONDS
-    if not direction:
-        direction, pattern, sequence_color = detect_ma21_green_buy_at_33(asset)
-        window_seconds = MA21_GREEN_BUY_WINDOW_SECONDS
-        max_entries = 2
-        entry_second = 33
-    if direction:
-        asset.signal = direction
-        return Signal(
-            asset=asset.name,
-            active_id=asset.active_id,
-            payout=asset.payout,
-            pattern=pattern,
-            direction=direction,
-            sequence_color=sequence_color or "-",
-            timestamp=datetime.now(),
-            strategy_window_seconds=window_seconds,
-            max_entries=max_entries,
-            entry_second=entry_second,
-        )
-    return None
+    signals = collect_strategy_signals(asset)
+    if not signals:
+        return None
+    asset.signal = " | ".join(f"{signal.direction}: {signal.pattern}" for signal in signals)
+    return signals[0]
