@@ -1,0 +1,13 @@
+tunnel: 9bb7ceb2-4c2f-485b-a9d2-f43eea4b8ed9
+credentials-file: C:\Users\josec\.cloudflared\9bb7ceb2-4c2f-485b-a9d2-f43eea4b8ed9.json
+
+ingress:
+  - hostname: trellu.online
+    service: http://127.0.0.1:8000
+  - hostname: www.trellu.online
+    service: http://127.0.0.1:8000
+  - hostname: trellus.online.trellu.online
+    service: http://127.0.0.1:8000
+  - hostname: www.trellus.online.trellu.online
+    service: http://127.0.0.1:8000
+  - service: http_status:404

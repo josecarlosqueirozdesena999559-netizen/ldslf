@@ -1,0 +1,10 @@
+__pycache__/
+*.py[cod]
+*.log
+*.pid
+.env
+.venv/
+venv/
+data/
+*.out.log
+*.err.log

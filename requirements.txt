@@ -1,0 +1,7 @@
+fastapi
+uvicorn
+rich
+pydantic
+python-dotenv
+websocket-client==1.8.0
+requests

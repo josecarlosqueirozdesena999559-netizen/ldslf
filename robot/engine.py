@@ -1,0 +1,283 @@
+from __future__ import annotations
+
+import time
+import threading
+from datetime import datetime
+
+from rich.live import Live
+
+from app.terminal_ui import TerminalUI
+from bullex.account import account_snapshot
+from bullex.client import BullExClient
+from models.settings import BotSettings
+from models.trade import Signal
+from robot.executor import TradeExecutor
+from robot.risk import RiskManager
+from robot.state import RobotState
+from robot.strategy import CANDLE_LOOKBACK, candle_color, generate_signal
+from storage.history import HistoryStore
+
+
+class RobotEngine:
+    def __init__(
+        self,
+        client: BullExClient,
+        settings: BotSettings,
+        risk: RiskManager,
+        history: HistoryStore,
+        ui: TerminalUI,
+        logger,
+        account_mode: str,
+        auto_trade: bool = True,
+        display_mode: str = "dashboard",
+    ) -> None:
+        self.client = client
+        self.settings = settings
+        self.risk = risk
+        self.history = history
+        self.ui = ui
+        self.logger = logger
+        self.account_mode = account_mode
+        self.auto_trade = auto_trade
+        self.display_mode = display_mode
+        self.state = RobotState()
+        self.executor = TradeExecutor(client, risk, history, logger)
+        self.operation_open = False
+        self.operation_lock = threading.Lock()
+        self.used_signal_keys: set[tuple] = set()
+        self.trade_thread: threading.Thread | None = None
+        self.scan_deadline = 0.0
+        self.last_green_time = "-"
+        self.last_payout_update = 0.0
+
+    def start(self) -> None:
+        self.state.running = True
+        self.state.status = "Carregando ativos"
+        self.state.assets = self.client.get_assets(self.settings.payout_min, self.settings.asset_limit)
+        self.logger.info("[ASSETS] %s ativos carregados", len(self.state.assets))
+        if not self.state.assets:
+            self.state.status = "Nenhum ativo aberto com payout mínimo"
+            self.ui.console.print("[red]Nenhum ativo aberto com payout mínimo.[/red]")
+            return
+        self.state.status = "Iniciando streams"
+        for asset in self.state.assets:
+            started = self.client.start_candles_stream(asset.name, self.settings.timeframe, CANDLE_LOOKBACK)
+            self.logger.info("[CANDLE] stream %s %s", asset.name, "iniciado" if started else "fallback polling")
+        self.state.status = "Carregando candles atuais da BullEx"
+        self.load_initial_candles()
+        self.reset_scan_timer()
+        self.state.status = "Monitorando e operando em DEMO" if self.auto_trade else "Monitorando candles"
+        self.monitor_assets()
+
+    def stop(self) -> None:
+        self.state.running = False
+        self.state.status = "Parado"
+        for asset in self.state.assets:
+            self.client.stop_candles_stream(asset.name, self.settings.timeframe)
+
+    def monitor_assets(self) -> None:
+        with Live(self.update_live_panels(), console=self.ui.console, refresh_per_second=2, screen=True) as live:
+            while self.state.running:
+                if self.auto_trade and not self.operation_open:
+                    signal = self.update_market_and_find_signal()
+                else:
+                    self.update_candles()
+                    self.update_focus_asset()
+                    signal = self.find_best_signal()
+                self.state.last_signal = signal
+                if self.auto_trade and not self.operation_open:
+                    self.handle_auto_trade(signal)
+                live.update(self.update_live_panels())
+                time.sleep(0.05)
+
+    def handle_auto_trade(self, signal: Signal | None) -> None:
+        self.state.status = "Escaneando ativos em tempo real / aguardando sinal"
+        if signal:
+            self.start_trade(signal)
+
+    def reset_scan_timer(self) -> None:
+        self.scan_deadline = time.time() + self.settings.scan_seconds
+
+    def update_candles(self) -> None:
+        now = time.time()
+        update_payout = now - self.last_payout_update >= 30
+        if update_payout:
+            self.last_payout_update = now
+        for asset in self._ordered_assets_for_update():
+            self.update_asset_candles(asset, update_payout)
+
+    def update_market_and_find_signal(self) -> Signal | None:
+        update_payout = time.time() - self.last_payout_update >= 30
+        if update_payout:
+            self.last_payout_update = time.time()
+        for asset in self._ordered_assets_for_update():
+            self.update_asset_candles(asset, update_payout)
+            self.update_focus_asset()
+            if not asset.open or asset.payout < self.settings.payout_min:
+                asset.signal = "-"
+                continue
+            signal = generate_signal(asset)
+            if not signal:
+                continue
+            key = self.signal_key(asset, signal)
+            if key in self.used_signal_keys:
+                continue
+            self.used_signal_keys.add(key)
+            self.logger.info("[SIGNAL] %s %s encontrado", signal.asset, signal.direction)
+            return signal
+        return None
+
+    def update_asset_candles(self, asset, update_payout: bool) -> None:
+        try:
+            if update_payout:
+                asset.payout = self.client.get_payout(asset.name)
+                asset.open = asset.payout >= self.settings.payout_min
+            if not asset.open:
+                return
+            asset.candles = self.client.get_realtime_candles(asset.name, self.settings.timeframe, CANDLE_LOOKBACK)
+            closed = [candle for candle in asset.candles if candle.closed]
+            colors = " ".join(candle_color(candle) for candle in closed[-5:])
+            self.logger.info("[CANDLE] %s ultimos 5: %s", asset.name, colors or "-")
+        except Exception as exc:
+            self.logger.info("[CANDLE] falha %s: %s", asset.name, exc)
+
+    def _ordered_assets_for_update(self):
+        if not self.state.focused_asset:
+            return self.state.assets
+        focused = []
+        others = []
+        for asset in self.state.assets:
+            if asset.name == self.state.focused_asset:
+                focused.append(asset)
+            else:
+                others.append(asset)
+        return focused + others
+
+    def load_initial_candles(self) -> None:
+        for asset in self.state.assets:
+            try:
+                asset.candles = self.client.get_realtime_candles(asset.name, self.settings.timeframe, CANDLE_LOOKBACK)
+                if not asset.candles:
+                    asset.candles = self.client.get_candles(asset.name, self.settings.timeframe, CANDLE_LOOKBACK)
+            except Exception as exc:
+                self.logger.info("[CANDLE] carga inicial falhou %s: %s", asset.name, exc)
+
+    def find_best_signal(self) -> Signal | None:
+        signals: list[tuple[Signal, tuple]] = []
+        for asset in self.state.assets:
+            if not asset.open or asset.payout < self.settings.payout_min:
+                asset.signal = "-"
+                continue
+            signal = generate_signal(asset)
+            if signal:
+                key = self.signal_key(asset, signal)
+                if key in self.used_signal_keys:
+                    continue
+                signals.append((signal, key))
+        if not signals:
+            return None
+        best, key = max(signals, key=lambda item: item[0].payout)
+        self.used_signal_keys.add(key)
+        self.logger.info("[SIGNAL] %s %s encontrado", best.asset, best.direction)
+        return best
+
+    def update_focus_asset(self) -> None:
+        if self.operation_open:
+            return
+        ready_assets = [asset for asset in self.state.assets if asset.candles]
+        if not ready_assets:
+            self.state.focused_asset = None
+            return
+
+        current = self._asset_by_name(self.state.focused_asset)
+        if current and self._visual_sequence_count(current) >= 2:
+            return
+
+        best = max(ready_assets, key=lambda asset: (self._visual_sequence_count(asset), asset.payout))
+        if self._visual_sequence_count(best) >= 2:
+            self.state.focused_asset = best.name
+        else:
+            self.state.focused_asset = None
+
+    def _asset_by_name(self, name: str | None):
+        if not name:
+            return None
+        return next((asset for asset in self.state.assets if asset.name == name), None)
+
+    @staticmethod
+    def _visual_sequence_count(asset) -> int:
+        if not asset.candles:
+            return 0
+        last_color = candle_color(asset.candles[-1])
+        if last_color == "DOJI":
+            return 0
+        count = 0
+        for candle in reversed(asset.candles):
+            if candle_color(candle) != last_color:
+                break
+            count += 1
+        return count
+
+    def start_trade(self, signal: Signal) -> None:
+        with self.operation_lock:
+            if self.operation_open:
+                return
+            self.state.focused_asset = signal.asset
+            self.operation_open = True
+        self.state.status = f"Operando: {signal.pattern}"
+        self.trade_thread = threading.Thread(target=self.execute_cycle, args=(signal,), daemon=True)
+        self.trade_thread.start()
+
+    def execute_cycle(self, signal: Signal) -> None:
+        try:
+            trade = self.executor.execute_cycle(signal, self.settings, self.account_mode)
+            if trade and trade.result == "WIN":
+                self.last_green_time = time.strftime("%H:%M:%S")
+            self.reset_scan_timer()
+            self.state.status = "Escaneando ativos em tempo real / aguardando sinal"
+        finally:
+            with self.operation_lock:
+                self.operation_open = False
+
+    @staticmethod
+    def is_reentry_signal(signal: Signal) -> bool:
+        return False
+
+    @staticmethod
+    def signal_key(asset, signal: Signal) -> tuple:
+        closed = [candle for candle in asset.candles if candle.closed]
+        last_timestamp = int(closed[-1].timestamp) if closed else 0
+        return (asset.name, signal.direction, signal.pattern, last_timestamp)
+
+    def update_live_panels(self):
+        account = account_snapshot(self.client)
+        if self.display_mode == "individual":
+            return self.ui.render_individual_monitor(
+                account=account,
+                assets=self.state.assets,
+                focused_asset_name=self.state.focused_asset,
+                settings=self.settings,
+                signal=self.state.last_signal,
+                current_trade=self.executor.current_trade,
+                status=self.state.status,
+                auto_trade=self.auto_trade,
+            )
+        return self.ui.render_dashboard(
+            account=account,
+            assets=self.state.assets,
+            settings=self.settings,
+            signal=self.state.last_signal,
+            current_trade=self.executor.current_trade,
+            history_summary=self.history.summary(),
+            status=self.state.status,
+            auto_trade=self.auto_trade,
+        )
+
+    @staticmethod
+    def _format_seconds(seconds: int) -> str:
+        seconds = max(0, seconds)
+        minutes, secs = divmod(seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+        if hours:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        return f"{minutes:02d}:{secs:02d}"
