@@ -1015,6 +1015,7 @@ class WebBot:
     def strategy_moment_state(self, monitored_assets: list[dict]) -> dict:
         if self.operation_open and self.last_signal:
             return {
+                "asset": self.last_signal.asset,
                 "title": f"Operando {self.last_signal.asset}: {self.last_signal.pattern}",
                 "detail": f"{self.last_signal.direction} em andamento com martingale dobrando se precisar",
             }
@@ -1023,6 +1024,7 @@ class WebBot:
         if hot_assets:
             row = hot_assets[0]
             return {
+                "asset": row["asset"],
                 "title": f"{row['asset']}: {row['signal']}",
                 "detail": f"Sequencia atual {row.get('sequence') or '-'} | payout {row.get('payout', 0)}%",
             }
@@ -1031,19 +1033,25 @@ class WebBot:
         if focus:
             signal = focus.signal or "Analisando"
             return {
+                "asset": focus.name,
                 "title": f"{focus.name}: {signal}",
                 "detail": f"Sequencia atual {self.visual_sequence(focus)} | estrategias analisadas sem ordem fixa",
             }
 
         return {
+            "asset": None,
             "title": "Escaneando estrategias sem ordem fixa",
             "detail": "8 candles, reversao, continuacao, MA21 contra e compra no segundo 33",
         }
 
     def state(self) -> dict:
-        focus = self.asset_by_name(self.focused_asset)
         paused = False
         candles = []
+        monitored_assets = self.monitored_assets_state()
+        strategy_moment = self.strategy_moment_state(monitored_assets)
+        focus = self.asset_by_name(strategy_moment.get("asset")) or self.asset_by_name(self.focused_asset)
+        if focus and self.focused_asset != focus.name and not self.operation_open:
+            self.focused_asset = focus.name
         moving_average = moving_average_snapshot(focus) if focus else moving_average_snapshot(Asset(name="", active_id=0, payout=0))
         if focus:
             closed_for_ma: list[Candle] = []
@@ -1074,8 +1082,6 @@ class WebBot:
         wins = self.session_wins
         losses = self.session_losses
         total = wins + losses
-        monitored_assets = self.monitored_assets_state()
-        strategy_moment = self.strategy_moment_state(monitored_assets)
         return {
             "connected": self.connected,
             "running": self.running,
