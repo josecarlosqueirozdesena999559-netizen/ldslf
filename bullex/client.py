@@ -185,7 +185,15 @@ class BullExClient:
         self._require_api()
         result, profit = self.api.check_win_v4(order_id)
         logging.info("[RESULT_RAW] order=%s result=%s profit=%s", order_id, result, profit)
-        status = "WIN" if profit > 0 else "LOSS" if profit < 0 else "DOJI"
+        raw_result = str(result or "").strip().lower()
+        if raw_result in {"win", "won", "profit"}:
+            status = "WIN"
+        elif raw_result in {"loose", "lose", "loss", "lost"}:
+            status = "LOSS"
+        elif raw_result in {"equal", "draw", "doji"}:
+            status = "DOJI"
+        else:
+            status = "WIN" if profit > 0 else "LOSS" if profit < 0 else "DOJI"
         return status, float(profit)
 
     def _require_api(self) -> None:

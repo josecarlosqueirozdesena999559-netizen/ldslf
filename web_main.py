@@ -530,9 +530,10 @@ class WebBot:
         win_trade = next((trade for trade in trades if trade.result == "WIN"), None)
         final_trade = win_trade or trades[-1]
         profit = round(sum(float(trade.profit or 0) for trade in trades), 2)
+        cycle_result = "WIN" if win_trade else "LOSS"
         if win_trade:
             self.session_wins += 1
-        elif final_trade.result == "LOSS":
+        else:
             self.session_losses += 1
         self.session_profit = round(self.session_profit + profit, 2)
         self.session_results.insert(
@@ -543,7 +544,7 @@ class WebBot:
                 "position": final_trade.direction,
                 "gale": final_trade.attempt.upper() if final_trade.attempt != "normal" else "ENTRADA",
                 "attempts": len(trades),
-                "result": "WIN" if win_trade else final_trade.result,
+                "result": cycle_result,
                 "profit": profit,
             },
         )

@@ -240,14 +240,37 @@ class TradeExecutor:
         order_id,
     ) -> tuple[str, float]:
         broker_profit = round(float(broker_profit), 2)
+        raw_result = str(broker_result or "").strip().upper()
+        if raw_result in {"WIN", "WON", "PROFIT"}:
+            profit = abs(broker_profit)
+            self.logger.info(
+                "[RESULT_ROBOT_ORDER] order=%s result=%s profit=%.2f",
+                order_id,
+                "WIN",
+                profit,
+            )
+            return "WIN", profit
+        if raw_result in {"LOSS", "LOOSE", "LOSE", "LOST"}:
+            profit = -abs(broker_profit)
+            self.logger.info(
+                "[RESULT_ROBOT_ORDER] order=%s result=%s profit=%.2f",
+                order_id,
+                "LOSS",
+                profit,
+            )
+            return "LOSS", profit
+        if raw_result in {"DOJI", "EQUAL", "DRAW"}:
+            self.logger.info("[RESULT_ROBOT_ORDER] order=%s result=DOJI profit=0.00", order_id)
+            return "DOJI", 0.0
         if abs(broker_profit) >= 0.01:
             result = "WIN" if broker_profit > 0 else "LOSS"
+            profit = abs(broker_profit) if result == "WIN" else -abs(broker_profit)
             self.logger.info(
                 "[RESULT_ROBOT_ORDER] order=%s result=%s profit=%.2f",
                 order_id,
                 result,
-                broker_profit,
+                profit,
             )
-            return result, broker_profit
+            return result, profit
         self.logger.info("[RESULT_ROBOT_ORDER] order=%s result=DOJI profit=0.00", order_id)
         return "DOJI", 0.0
