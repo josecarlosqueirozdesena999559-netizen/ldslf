@@ -45,6 +45,7 @@ class RobotEngine:
         self.operation_open = False
         self.operation_lock = threading.Lock()
         self.used_signal_keys: set[tuple] = set()
+        self.negative_at_33_marks: set[tuple[str, int]] = set()
         self.trade_thread: threading.Thread | None = None
         self.scan_deadline = 0.0
         self.last_green_time = "-"
@@ -135,6 +136,7 @@ class RobotEngine:
             if not asset.open:
                 return
             asset.candles = self.client.get_realtime_candles(asset.name, self.settings.timeframe, CANDLE_LOOKBACK)
+            self.mark_negative_at_33(asset)
             closed = [candle for candle in asset.candles if candle.closed]
             colors = " ".join(candle_color(candle) for candle in closed[-5:])
             self.logger.info("[CANDLE] %s ultimos 5: %s", asset.name, colors or "-")
@@ -159,8 +161,24 @@ class RobotEngine:
                 asset.candles = self.client.get_realtime_candles(asset.name, self.settings.timeframe, CANDLE_LOOKBACK)
                 if not asset.candles:
                     asset.candles = self.client.get_candles(asset.name, self.settings.timeframe, CANDLE_LOOKBACK)
+                self.mark_negative_at_33(asset)
             except Exception as exc:
                 self.logger.info("[CANDLE] carga inicial falhou %s: %s", asset.name, exc)
+
+    def mark_negative_at_33(self, asset) -> None:
+        for candle in asset.candles:
+            key = (asset.name, int(candle.timestamp))
+            if key in self.negative_at_33_marks:
+                candle.negative_at_33 = True
+
+        current = asset.current_candle
+        if not current or current.closed:
+            return
+        elapsed = int(current.update_timestamp or time.time()) - int(current.timestamp)
+        key = (asset.name, int(current.timestamp))
+        if elapsed >= 33 and current.close < current.open:
+            self.negative_at_33_marks.add(key)
+            current.negative_at_33 = True
 
     def find_best_signal(self, mark_used: bool = True) -> Signal | None:
         signals: list[tuple[Signal, tuple]] = []

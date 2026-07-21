@@ -197,6 +197,7 @@ class WebBot:
         self.scheduler_thread: threading.Thread | None = None
         self.operation_open = False
         self.used_signal_keys: set[tuple] = set()
+        self.negative_at_33_marks: set[tuple[str, int]] = set()
         self.last_payout_update = 0.0
         self.last_account_update = 0.0
         self.last_account = {"connected": False, "mode": "DEMO", "currency": "", "balance": 0.0}
@@ -305,6 +306,7 @@ class WebBot:
             self.manual_paused = False
             self.operation_open = False
             self.used_signal_keys = set()
+            self.negative_at_33_marks = set()
             self.status = "Aguardando login"
             self.last_account = {"connected": False, "mode": "DEMO", "currency": "", "balance": 0.0}
             self.settings_saved = False
@@ -389,8 +391,24 @@ class WebBot:
                     candles = self.client.get_candles(asset.name, self.settings.timeframe, CANDLE_LOOKBACK)
                 if candles:
                     asset.candles = candles
+                    self.mark_negative_at_33(asset)
         except Exception:
             pass
+
+    def mark_negative_at_33(self, asset: Asset) -> None:
+        for candle in asset.candles:
+            key = (asset.name, int(candle.timestamp))
+            if key in self.negative_at_33_marks:
+                candle.negative_at_33 = True
+
+        current = asset.current_candle
+        if not current or current.closed:
+            return
+        elapsed = int(current.update_timestamp or time.time()) - int(current.timestamp)
+        key = (asset.name, int(current.timestamp))
+        if elapsed >= 33 and current.close < current.open:
+            self.negative_at_33_marks.add(key)
+            current.negative_at_33 = True
 
     def ordered_assets(self) -> list[Asset]:
         if not self.focused_asset:
@@ -1041,7 +1059,7 @@ class WebBot:
         return {
             "asset": None,
             "title": "Escaneando estrategias sem ordem fixa",
-            "detail": "8 candles, reversao, continuacao, MA21 contra e compra no segundo 33",
+            "detail": "8 candles, reversao, continuacao, MA21 contra, compra no segundo 33 e virada 33 negativo para verde",
         }
 
     def state(self) -> dict:
@@ -1094,7 +1112,7 @@ class WebBot:
             "settings_saved": self.settings_saved,
             "account": self.last_account,
             "strategy": "8 candles",
-            "strategy_detail": "Reversao: 2 candles contrarios e entradas 3/4/5. Continuacao: 3 candles iguais e entradas 4/5/6. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde acima da MA21 fechado depois de 33s, sem 3 verdes antes, com 2 entradas. Sempre com martingale dobrando.",
+            "strategy_detail": "Reversao: 2 candles contrarios e entradas 3/4/5. Continuacao: 3 candles iguais e entradas 4/5/6. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde acima da MA21 fechado depois de 33s, sem 3 verdes antes, com 2 entradas. Virada 33: depois de 3+ candles da mesma cor, candle fica negativo aos 33s e fecha verde positivo, CALL com duas reentradas. Sempre com martingale dobrando.",
             "strategy_moment": strategy_moment["title"],
             "strategy_moment_detail": strategy_moment["detail"],
             "target_sequence": self.active_strategy,

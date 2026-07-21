@@ -5,7 +5,13 @@ from models.candle import Candle
 from robot.strategy import generate_signal
 
 
-def candle(color: str, timestamp: int, wickless: bool = False, update_timestamp: int | None = None) -> Candle:
+def candle(
+    color: str,
+    timestamp: int,
+    wickless: bool = False,
+    update_timestamp: int | None = None,
+    negative_at_33: bool = False,
+) -> Candle:
     open_price = 1.0
     close_price = 2.0 if color == "GREEN" else 0.5
     return Candle(
@@ -15,6 +21,7 @@ def candle(color: str, timestamp: int, wickless: bool = False, update_timestamp:
         low=min(open_price, close_price) if wickless else min(open_price, close_price) - 0.1,
         timestamp=timestamp,
         update_timestamp=update_timestamp,
+        negative_at_33=negative_at_33,
     )
 
 
@@ -122,6 +129,32 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
     def test_green_above_ma21_strategy_requires_close_after_33_seconds(self) -> None:
         candles = [candle("RED", index) for index in range(20)]
         candles.append(candle("GREEN", 20, update_timestamp=33))
+        asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
+
+        self.assertIsNone(generate_signal(asset))
+
+    def test_negative_at_33_then_green_close_after_three_same_color_signals_call(self) -> None:
+        candles = [candle("RED", index) for index in range(3)]
+        candles.append(candle("GREEN", 3, negative_at_33=True))
+        asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
+
+        signal = generate_signal(asset)
+
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal.direction, "CALL")
+        self.assertEqual(signal.max_entries, 3)
+        self.assertIn("negativo aos 33s", signal.pattern)
+
+    def test_negative_at_33_strategy_requires_three_previous_same_color_candles(self) -> None:
+        candles = [candle("RED", 0), candle("GREEN", 1), candle("RED", 2)]
+        candles.append(candle("GREEN", 3, negative_at_33=True))
+        asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
+
+        self.assertIsNone(generate_signal(asset))
+
+    def test_negative_at_33_strategy_requires_negative_marker(self) -> None:
+        candles = [candle("RED", index) for index in range(3)]
+        candles.append(candle("GREEN", 3))
         asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
 
         self.assertIsNone(generate_signal(asset))

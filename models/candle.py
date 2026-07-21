@@ -12,6 +12,7 @@ class Candle:
     closed: bool = True
     update_timestamp: int | None = None
     asset: str = ""
+    negative_at_33: bool = False
 
     @property
     def time(self) -> datetime:

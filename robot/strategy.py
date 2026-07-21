@@ -13,11 +13,13 @@ REVERSAL_WINDOW_SECONDS = 300
 CONTINUATION_WINDOW_SECONDS = 600
 MA21_WICKLESS_WINDOW_SECONDS = 600
 MA21_GREEN_BUY_WINDOW_SECONDS = 300
+NEGATIVE_33_GREEN_CLOSE_WINDOW_SECONDS = 300
 STRATEGY_PATTERN_MARKERS = (
     "operar contra nas velas 3, 4 e 5",
     "operar contra nas velas 4, 5 e 6",
     "operar contra tendencia nas velas 5, 6 e 7",
     "comprar no segundo 33",
+    "negativo aos 33s e fechou verde positivo",
 )
 
 
@@ -171,6 +173,9 @@ def describe_strategy_watch(asset: Asset) -> str:
     ma21_status = describe_ma21_watch(closed)
     if ma21_status:
         return ma21_status
+    negative_33_status = describe_negative_33_green_close_watch(asset)
+    if negative_33_status:
+        return negative_33_status
     return "Analisando"
 
 
@@ -209,6 +214,36 @@ def describe_ma21_watch(closed: list[Candle]) -> str | None:
                     and anchor.close < anchor_ma21
                 ):
                     return f"MA21 contra: {green_count}/4 verdes"
+    return None
+
+
+def previous_same_color_count(candles: list[Candle], end_index: int) -> tuple[str | None, int]:
+    if end_index <= 0:
+        return None, 0
+    color = candle_color(candles[end_index - 1])
+    if color == "DOJI":
+        return color, 1
+    count = 0
+    for candle in reversed(candles[:end_index]):
+        if candle_color(candle) != color:
+            break
+        count += 1
+    return color, count
+
+
+def describe_negative_33_green_close_watch(asset: Asset) -> str | None:
+    closed = [candle for candle in asset.candles if candle.closed]
+    current = asset.current_candle
+    if current and not current.closed:
+        color, count = previous_same_color_count(closed, len(closed))
+        if count >= 3:
+            if getattr(current, "negative_at_33", False):
+                return f"33 negativo marcado apos {count} candles da mesma cor"
+            current_second = int(current.update_timestamp or current.timestamp) - int(current.timestamp)
+            if current_second < 33:
+                return f"Aguardando 33s apos {count} candles da mesma cor"
+            if current.close < current.open:
+                return f"Candle negativo aos 33s apos {count} candles da mesma cor"
     return None
 
 
@@ -341,6 +376,30 @@ def detect_ma21_green_buy_at_33(asset: Asset) -> tuple[str | None, str, str | No
     return "CALL", pattern, "GREEN"
 
 
+def detect_negative_33_green_close_call(asset: Asset) -> tuple[str | None, str, str | None]:
+    closed = [candle for candle in asset.candles if candle.closed]
+    if len(closed) < 4:
+        return None, "Aguardando 3 candles iguais e candle de virada", None
+
+    anchor_index = len(closed) - 1
+    anchor = closed[anchor_index]
+    if candle_color(anchor) != "GREEN":
+        return None, "Aguardando candle fechar verde positivo", candle_color(anchor)
+    if not getattr(anchor, "negative_at_33", False):
+        return None, "Aguardando candle que estava negativo aos 33s", "GREEN"
+
+    previous_color, previous_count = previous_same_color_count(closed, anchor_index)
+    if previous_count < 3 or previous_color == "DOJI":
+        return None, "Aguardando 3 candles ou mais da mesma cor antes da virada", previous_color
+
+    label = "verdes" if previous_color == "GREEN" else "vermelhos"
+    pattern = (
+        f"{previous_count} candles {label}; candle estava negativo aos 33s "
+        "e fechou verde positivo; CALL com duas reentradas se necessario"
+    )
+    return "CALL", pattern, "GREEN"
+
+
 def collect_strategy_signals(asset: Asset) -> list[Signal]:
     signals: list[Signal] = []
 
@@ -367,6 +426,19 @@ def collect_strategy_signals(asset: Asset) -> list[Signal]:
                 MA21_GREEN_BUY_WINDOW_SECONDS,
                 max_entries=2,
                 entry_second=33,
+            )
+        )
+
+    direction, pattern, sequence_color = detect_negative_33_green_close_call(asset)
+    if direction:
+        signals.append(
+            make_signal(
+                asset,
+                direction,
+                pattern,
+                sequence_color,
+                NEGATIVE_33_GREEN_CLOSE_WINDOW_SECONDS,
+                max_entries=3,
             )
         )
 
