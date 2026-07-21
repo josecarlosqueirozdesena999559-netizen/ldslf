@@ -704,8 +704,8 @@
       $("pausePanel").classList.add("hidden");
       $("analysisPanel").classList.remove("hidden");
       $("asset").textContent = data.asset || "Aguardando ativo";
-      $("sequence").textContent = `Estratégia do momento: ${data.strategy || "8 candles"} - reversão 3/4/5, continuação 4/5/6, MA21 5/6/7 ou compra no 33`;
-      $("signal").textContent = data.signal ? `Sinal: ${data.signal.direction} (${data.signal.pattern})` : `Sinal: aguardando 8 candles`;
+      $("sequence").textContent = `Estratégia do momento: ${data.strategy_moment || "Escaneando estratégias sem ordem fixa"}`;
+      $("signal").textContent = data.signal ? `Sinal: ${data.signal.direction} (${data.signal.pattern})` : `Análise: ${data.strategy_moment_detail || "aguardando padrão"}`;
       renderMovingAverage(data.moving_average || {});
 
       const last = data.candles[data.candles.length - 1];

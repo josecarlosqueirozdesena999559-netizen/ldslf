@@ -999,6 +999,34 @@ class WebBot:
             )
         return sorted(rows, key=lambda row: (not row["hot"], row["asset"]))[:20]
 
+    def strategy_moment_state(self, monitored_assets: list[dict]) -> dict:
+        if self.operation_open and self.last_signal:
+            return {
+                "title": f"Operando {self.last_signal.asset}: {self.last_signal.pattern}",
+                "detail": f"{self.last_signal.direction} em andamento com martingale dobrando se precisar",
+            }
+
+        hot_assets = [row for row in monitored_assets if row.get("hot")]
+        if hot_assets:
+            row = hot_assets[0]
+            return {
+                "title": f"{row['asset']}: {row['signal']}",
+                "detail": f"Sequencia atual {row.get('sequence') or '-'} | payout {row.get('payout', 0)}%",
+            }
+
+        focus = self.asset_by_name(self.focused_asset)
+        if focus:
+            signal = focus.signal or "Analisando"
+            return {
+                "title": f"{focus.name}: {signal}",
+                "detail": f"Sequencia atual {self.visual_sequence(focus)} | estrategias analisadas sem ordem fixa",
+            }
+
+        return {
+            "title": "Escaneando estrategias sem ordem fixa",
+            "detail": "8 candles, reversao, continuacao, MA21 contra e compra no segundo 33",
+        }
+
     def state(self) -> dict:
         focus = self.asset_by_name(self.focused_asset)
         paused = False
@@ -1033,6 +1061,8 @@ class WebBot:
         wins = self.session_wins
         losses = self.session_losses
         total = wins + losses
+        monitored_assets = self.monitored_assets_state()
+        strategy_moment = self.strategy_moment_state(monitored_assets)
         return {
             "connected": self.connected,
             "running": self.running,
@@ -1046,6 +1076,8 @@ class WebBot:
             "account": self.last_account,
             "strategy": "8 candles",
             "strategy_detail": "Reversao: 2 candles contrarios e entradas 3/4/5. Continuacao: 3 candles iguais e entradas 4/5/6. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde acima da MA21 fechado depois de 33s, sem 3 verdes antes, com 2 entradas. Sempre com martingale dobrando.",
+            "strategy_moment": strategy_moment["title"],
+            "strategy_moment_detail": strategy_moment["detail"],
             "target_sequence": self.active_strategy,
             "next_sequence": self.next_strategy,
             "asset": focus.name if focus else None,
@@ -1058,7 +1090,7 @@ class WebBot:
                 for key, value in moving_average.items()
             },
             "candles": candles,
-            "monitored_assets": self.monitored_assets_state(),
+            "monitored_assets": monitored_assets,
             "wins": wins,
             "losses": losses,
             "greens": wins,
