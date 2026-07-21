@@ -245,6 +245,8 @@
         <input id="password" type="password" autocomplete="current-password" />
         <label>Tipo de conta</label>
         <select id="accountMode"><option value="DEMO">DEMO</option><option value="REAL">REAL</option></select>
+        <label>Confirmação para REAL</label>
+        <input id="realConfirmation" placeholder="Digite REAL para liberar conta real" />
         <p id="loginMsg" class="yellow"></p>
         <button onclick="login()">Conectar</button>
       </section>
@@ -491,7 +493,12 @@
 
     async function login() {
       $("loginMsg").textContent = "Conectando...";
-      const payload = {email:$("email").value, password:$("password").value, account_mode:$("accountMode").value};
+      const payload = {
+        email:$("email").value,
+        password:$("password").value,
+        account_mode:$("accountMode").value,
+        real_confirmation:$("realConfirmation").value
+      };
       const data = await request("/api/login", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(payload)});
       if (!data.ok) { $("loginMsg").textContent = data.error || "Falha no login"; return; }
       $("loginMsg").textContent = "";
