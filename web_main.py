@@ -593,7 +593,7 @@ class WebBot:
 
     def update_settings(self, payload: SettingsPayload) -> None:
         with self.lock:
-            self.settings.max_martingale = 2
+            self.settings.max_martingale = 1
             self.settings.martingale_enabled = True
             if payload.entry_value is not None:
                 self.settings.entry_value = max(0.01, float(payload.entry_value))
@@ -638,7 +638,7 @@ class WebBot:
         self.settings.stop_loss = float(data.get("stop_loss", self.settings.stop_loss))
         self.settings.payout_min = int(data.get("payout_min", self.settings.payout_min))
         self.settings.martingale_multiplier = 2.0
-        self.settings.max_martingale = 2
+        self.settings.max_martingale = 1
         self.settings.martingale_enabled = True
         self.schedule_enabled = False
         self.schedule_start = str(data.get("schedule_start", self.schedule_start))
@@ -884,7 +884,7 @@ class WebBot:
 
     def manual_entry_settings(self, entry: dict) -> BotSettings:
         value = max(0.01, float(entry.get("value") or self.settings.entry_value))
-        return replace(self.settings, entry_value=value, max_martingale=2, martingale_enabled=True)
+        return replace(self.settings, entry_value=value, max_martingale=1, martingale_enabled=True)
 
     def manual_signal(self, entry: dict) -> Signal:
         asset_name = self.resolve_manual_asset_name(str(entry["asset"]).strip().upper())
@@ -1120,7 +1120,7 @@ class WebBot:
             "settings_saved": self.settings_saved,
             "account": self.last_account,
             "strategy": "8 candles",
-            "strategy_detail": "Reversao: 2 candles contrarios e entradas 3/4/5. Continuacao: 3 candles iguais e entradas 4/5/6. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde acima da MA21 fechado depois de 33s, sem 3 verdes antes, com 2 entradas. Virada 33 CALL: depois de 3+ candles da mesma cor, candle fica negativo aos 33s e fecha verde positivo, CALL com duas reentradas. Virada 33 PUT: depois de 3+ candles da mesma cor, candle fica positivo aos 33s e fecha vermelho negativo, PUT no inicio do proximo candle com duas reentradas. Sempre com martingale dobrando.",
+            "strategy_detail": "Reversao: 2 candles contrarios e entradas 3/4/5. Continuacao: 3 candles iguais e entradas 4/5/6. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde acima da MA21 fechado depois de 33s, sem 3 verdes antes, com 2 entradas. Virada 33 CALL: depois de 3+ candles da mesma cor, candle fica negativo aos 33s e fecha verde positivo, CALL com G1. Virada 33 PUT: depois de 3+ candles da mesma cor, candle fica positivo aos 33s e fecha vermelho negativo, PUT no inicio do proximo candle com G1. Sempre com martingale dobrando.",
             "strategy_moment": strategy_moment["title"],
             "strategy_moment_detail": strategy_moment["detail"],
             "target_sequence": self.active_strategy,

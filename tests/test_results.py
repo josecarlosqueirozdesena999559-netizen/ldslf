@@ -52,16 +52,17 @@ class ResultAccountingTests(unittest.TestCase):
         self.assertEqual(bot.session_losses, 1)
         self.assertEqual(bot.session_results[0]["result"], "LOSS")
 
-    def test_entry_after_open_grace_is_blocked(self) -> None:
+    def test_entry_after_open_grace_waits_next_candle(self) -> None:
         executor = object.__new__(TradeExecutor)
         executor.logger = DummyLogger()
         executor.current_trade = ""
 
-        with patch("robot.executor.time.time", return_value=70):
+        with patch("robot.executor.time.time", return_value=70), patch("robot.executor.time.sleep") as sleep:
             allowed = executor.ensure_candle_open_entry(BotSettings(timeframe="M1"))
 
-        self.assertFalse(allowed)
-        self.assertIn("Entrada atrasada ignorada", executor.current_trade)
+        self.assertTrue(allowed)
+        sleep.assert_called_once_with(50)
+        self.assertIn("Aguardando nascer proximo candle", executor.current_trade)
 
     def test_entry_inside_open_grace_is_allowed(self) -> None:
         executor = object.__new__(TradeExecutor)

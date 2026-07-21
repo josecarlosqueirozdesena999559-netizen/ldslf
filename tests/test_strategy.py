@@ -64,7 +64,7 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
         self.assertIsNotNone(signal)
         self.assertEqual(signal.direction, "PUT")
         self.assertEqual(signal.strategy_window_seconds, 600)
-        self.assertEqual(signal.max_entries, 3)
+        self.assertEqual(signal.max_entries, 2)
         self.assertIn("velas 4, 5 e 6", signal.pattern)
 
     def test_eight_red_plus_three_red_signals_call_for_candles_four_five_six(self) -> None:
@@ -73,7 +73,7 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
         self.assertIsNotNone(signal)
         self.assertEqual(signal.direction, "CALL")
         self.assertEqual(signal.strategy_window_seconds, 600)
-        self.assertEqual(signal.max_entries, 3)
+        self.assertEqual(signal.max_entries, 2)
 
     def test_continuation_requires_exactly_third_equal_after_eight(self) -> None:
         self.assertIsNone(generate_signal(self.make_asset(["GREEN"] * 10)))
@@ -89,7 +89,7 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
 
         self.assertIsNotNone(signal)
         self.assertEqual(signal.direction, "PUT")
-        self.assertEqual(signal.max_entries, 3)
+        self.assertEqual(signal.max_entries, 2)
         self.assertIn("velas 5, 6 e 7", signal.pattern)
 
     def test_red_wickless_ma21_strategy_requires_close_before_33_seconds(self) -> None:
@@ -144,7 +144,7 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
 
         self.assertIsNotNone(signal)
         self.assertEqual(signal.direction, "CALL")
-        self.assertEqual(signal.max_entries, 3)
+        self.assertEqual(signal.max_entries, 2)
         self.assertIn("negativo aos 33s", signal.pattern)
 
     def test_negative_at_33_strategy_requires_three_previous_same_color_candles(self) -> None:
@@ -170,7 +170,7 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
 
         self.assertIsNotNone(signal)
         self.assertEqual(signal.direction, "PUT")
-        self.assertEqual(signal.max_entries, 3)
+        self.assertEqual(signal.max_entries, 2)
         self.assertIsNone(signal.entry_second)
         self.assertIn("positivo aos 33s", signal.pattern)
 

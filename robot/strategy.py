@@ -30,7 +30,7 @@ def make_signal(
     pattern: str,
     sequence_color: str | None,
     window_seconds: int,
-    max_entries: int = 3,
+    max_entries: int = 2,
     entry_second: int | None = None,
 ) -> Signal:
     return Signal(
@@ -400,7 +400,7 @@ def detect_negative_33_green_close_call(asset: Asset) -> tuple[str | None, str, 
     label = "verdes" if previous_color == "GREEN" else "vermelhos"
     pattern = (
         f"{previous_count} candles {label}; candle estava negativo aos 33s "
-        "e fechou verde positivo; CALL com duas reentradas se necessario"
+        "e fechou verde positivo; CALL com G1 se necessario"
     )
     return "CALL", pattern, "GREEN"
 
@@ -424,7 +424,7 @@ def detect_positive_33_red_close_put(asset: Asset) -> tuple[str | None, str, str
     label = "verdes" if previous_color == "GREEN" else "vermelhos"
     pattern = (
         f"{previous_count} candles {label}; candle estava positivo aos 33s "
-        "e fechou vermelho negativo; PUT com duas reentradas se necessario"
+        "e fechou vermelho negativo; PUT com G1 se necessario"
     )
     return "PUT", pattern, "RED"
 
@@ -467,7 +467,7 @@ def collect_strategy_signals(asset: Asset) -> list[Signal]:
                 pattern,
                 sequence_color,
                 NEGATIVE_33_GREEN_CLOSE_WINDOW_SECONDS,
-                max_entries=3,
+                max_entries=2,
             )
         )
 
@@ -480,7 +480,7 @@ def collect_strategy_signals(asset: Asset) -> list[Signal]:
                 pattern,
                 sequence_color,
                 NEGATIVE_33_GREEN_CLOSE_WINDOW_SECONDS,
-                max_entries=3,
+                max_entries=2,
             )
         )
 

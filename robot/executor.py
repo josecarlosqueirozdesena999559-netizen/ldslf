@@ -237,9 +237,11 @@ class TradeExecutor:
         candle_second = int(time.time()) % duration_seconds
         if candle_second <= ENTRY_OPEN_GRACE_SECONDS:
             return True
-        self.current_trade = f"Entrada atrasada ignorada ({candle_second}s); aguardando proximo sinal"
-        self.logger.info("[TRADE] entrada ignorada por atraso: %ss do candle", candle_second)
-        return False
+        wait = duration_seconds - candle_second
+        self.current_trade = f"Aguardando nascer proximo candle ({wait}s)"
+        self.logger.info("[TRADE] aguardando proximo candle: %ss", wait)
+        time.sleep(wait)
+        return True
 
     def wait_entry_second(self, signal: Signal) -> None:
         entry_second = getattr(signal, "entry_second", None)

@@ -9,7 +9,7 @@ class BotSettings:
     timeframe: str = "M1"
     payout_min: int = 80
     martingale_enabled: bool = True
-    max_martingale: int = 2
+    max_martingale: int = 1
     martingale_multiplier: float = 2.0
     asset_limit: int = 10
     scan_seconds: int = 3600
