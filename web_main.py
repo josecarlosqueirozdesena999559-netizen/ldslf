@@ -21,7 +21,14 @@ from models.settings import BotSettings
 from models.trade import Signal, TradeResult
 from robot.executor import TradeExecutor
 from robot.risk import RiskManager
-from robot.strategy import CANDLE_LOOKBACK, MOVING_AVERAGE_PERIOD, candle_color, generate_signal, moving_average_snapshot
+from robot.strategy import (
+    CANDLE_LOOKBACK,
+    MOVING_AVERAGE_PERIOD,
+    candle_color,
+    generate_signal,
+    is_allowed_strategy_signal,
+    moving_average_snapshot,
+)
 from storage.history import HistoryStore
 from storage.supabase_store import SupabaseStore
 
@@ -409,9 +416,9 @@ class WebBot:
         self.focused_asset = best.name
 
     def find_best_signal(self) -> Signal | None:
-        return self.find_signal_for_sequences()
+        return self.find_signal_for_sequences(mark_used=False)
 
-    def find_signal_for_sequences(self) -> Signal | None:
+    def find_signal_for_sequences(self, mark_used: bool = True) -> Signal | None:
         signals = []
         for asset in self.assets:
             if asset.open and asset.payout >= self.settings.payout_min:
@@ -424,12 +431,18 @@ class WebBot:
         if not signals:
             return None
         signal, key = max(signals, key=lambda item: item[0].payout)
-        self.used_signal_keys.add(key)
+        if mark_used:
+            self.used_signal_keys.add(key)
         return signal
 
     def start_trade(self, signal: Signal) -> None:
         with self.lock:
             if self.operation_open:
+                return
+            if not is_allowed_strategy_signal(signal):
+                self.status = f"Bloqueado: estrategia nao permitida ({signal.pattern})"
+                if self.executor:
+                    self.executor.current_trade = self.status
                 return
             self.operation_open = True
             self.focused_asset = signal.asset

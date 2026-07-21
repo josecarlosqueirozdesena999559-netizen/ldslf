@@ -14,7 +14,7 @@ from models.trade import Signal
 from robot.executor import TradeExecutor
 from robot.risk import RiskManager
 from robot.state import RobotState
-from robot.strategy import CANDLE_LOOKBACK, candle_color, generate_signal
+from robot.strategy import CANDLE_LOOKBACK, candle_color, generate_signal, is_allowed_strategy_signal
 from storage.history import HistoryStore
 
 
@@ -83,7 +83,7 @@ class RobotEngine:
                 else:
                     self.update_candles()
                     self.update_focus_asset()
-                    signal = self.find_best_signal()
+                    signal = self.find_best_signal(mark_used=False)
                 self.state.last_signal = signal
                 if self.auto_trade and not self.operation_open:
                     self.handle_auto_trade(signal)
@@ -162,7 +162,7 @@ class RobotEngine:
             except Exception as exc:
                 self.logger.info("[CANDLE] carga inicial falhou %s: %s", asset.name, exc)
 
-    def find_best_signal(self) -> Signal | None:
+    def find_best_signal(self, mark_used: bool = True) -> Signal | None:
         signals: list[tuple[Signal, tuple]] = []
         for asset in self.state.assets:
             if not asset.open or asset.payout < self.settings.payout_min:
@@ -177,7 +177,8 @@ class RobotEngine:
         if not signals:
             return None
         best, key = max(signals, key=lambda item: item[0].payout)
-        self.used_signal_keys.add(key)
+        if mark_used:
+            self.used_signal_keys.add(key)
         self.logger.info("[SIGNAL] %s %s encontrado", best.asset, best.direction)
         return best
 
@@ -221,6 +222,10 @@ class RobotEngine:
     def start_trade(self, signal: Signal) -> None:
         with self.operation_lock:
             if self.operation_open:
+                return
+            if not is_allowed_strategy_signal(signal):
+                self.state.status = f"Bloqueado: estrategia nao permitida ({signal.pattern})"
+                self.executor.current_trade = self.state.status
                 return
             self.state.focused_asset = signal.asset
             self.operation_open = True

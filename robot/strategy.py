@@ -13,6 +13,12 @@ REVERSAL_WINDOW_SECONDS = 300
 CONTINUATION_WINDOW_SECONDS = 600
 MA21_WICKLESS_WINDOW_SECONDS = 600
 MA21_GREEN_BUY_WINDOW_SECONDS = 300
+STRATEGY_PATTERN_MARKERS = (
+    "operar contra nas velas 3, 4 e 5",
+    "operar contra nas velas 4, 5 e 6",
+    "operar contra tendencia nas velas 5, 6 e 7",
+    "comprar no segundo 33",
+)
 
 
 def make_signal(
@@ -365,6 +371,11 @@ def collect_strategy_signals(asset: Asset) -> list[Signal]:
         )
 
     return signals
+
+
+def is_allowed_strategy_signal(signal: Signal) -> bool:
+    pattern = (signal.pattern or "").lower()
+    return any(marker in pattern for marker in STRATEGY_PATTERN_MARKERS)
 
 
 def generate_signal(asset: Asset) -> Signal | None:

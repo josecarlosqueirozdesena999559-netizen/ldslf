@@ -7,6 +7,7 @@ from models.settings import BotSettings
 from models.trade import Signal, TradeResult
 from robot.martingale import attempt_name, get_next_value
 from robot.risk import RiskManager
+from robot.strategy import is_allowed_strategy_signal
 from storage.history import HistoryStore
 
 
@@ -60,6 +61,11 @@ class TradeExecutor:
             self._operation_lock.release()
 
     def _execute_cycle(self, signal: Signal, settings: BotSettings, account_mode: str) -> TradeResult | None:
+        if not is_allowed_strategy_signal(signal):
+            self.logger.info("[TRADE] sinal bloqueado fora das estrategias: %s", signal.pattern)
+            self.current_trade = f"Bloqueado: estrategia nao permitida ({signal.pattern})"
+            return None
+
         duration = {"M1": 1, "M5": 5, "M15": 15}[settings.timeframe]
         step = 0
         last_trade: TradeResult | None = None
