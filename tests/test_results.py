@@ -57,12 +57,12 @@ class ResultAccountingTests(unittest.TestCase):
         executor.logger = DummyLogger()
         executor.current_trade = ""
 
-        with patch("robot.executor.time.time", return_value=70), patch("robot.executor.time.sleep") as sleep:
+        with patch("robot.executor.time.time", return_value=70), patch.object(executor, "sleep_until") as sleep_until:
             allowed = executor.ensure_candle_open_entry(BotSettings(timeframe="M1"))
 
         self.assertTrue(allowed)
-        sleep.assert_called_once_with(50)
-        self.assertIn("Aguardando nascer proximo candle", executor.current_trade)
+        sleep_until.assert_called_once_with(119.65)
+        self.assertIn("Preparando entrada no proximo candle", executor.current_trade)
 
     def test_entry_inside_open_grace_is_allowed(self) -> None:
         executor = object.__new__(TradeExecutor)

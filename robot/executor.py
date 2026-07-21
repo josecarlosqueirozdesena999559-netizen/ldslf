@@ -13,6 +13,8 @@ from storage.history import HistoryStore
 
 DEFAULT_STRATEGY_WINDOW_SECONDS = 300
 ENTRY_OPEN_GRACE_SECONDS = 3
+ENTRY_PREPARE_LEAD_SECONDS = 0.35
+ENTRY_POLL_SECONDS = 0.03
 
 
 class TradeExecutor:
@@ -234,14 +236,22 @@ class TradeExecutor:
 
     def ensure_candle_open_entry(self, settings: BotSettings) -> bool:
         duration_seconds = {"M1": 60, "M5": 300, "M15": 900}[settings.timeframe]
-        candle_second = int(time.time()) % duration_seconds
+        now = time.time()
+        candle_second = now % duration_seconds
         if candle_second <= ENTRY_OPEN_GRACE_SECONDS:
             return True
-        wait = duration_seconds - candle_second
-        self.current_trade = f"Aguardando nascer proximo candle ({wait}s)"
-        self.logger.info("[TRADE] aguardando proximo candle: %ss", wait)
-        time.sleep(wait)
+        wait = max(0.0, duration_seconds - candle_second - ENTRY_PREPARE_LEAD_SECONDS)
+        self.current_trade = f"Preparando entrada no proximo candle ({wait:.2f}s)"
+        self.logger.info("[TRADE] preparando entrada para proximo candle: %.2fs", wait)
+        self.sleep_until(time.time() + wait)
         return True
+
+    def sleep_until(self, target: float) -> None:
+        while True:
+            remaining = target - time.time()
+            if remaining <= 0:
+                return
+            time.sleep(min(ENTRY_POLL_SECONDS, remaining))
 
     def wait_entry_second(self, signal: Signal) -> None:
         entry_second = getattr(signal, "entry_second", None)
