@@ -194,8 +194,8 @@ def describe_ma21_watch(closed: list[Candle]) -> str | None:
         return None
 
     if candle_color(last) == "GREEN" and last.close > ma21:
-        previous_three = [candle_color(candle) for candle in closed[-4:-1]]
-        if previous_three != ["GREEN", "GREEN", "GREEN"]:
+        last_five = [candle_color(candle) for candle in closed[-5:]]
+        if len(last_five) < 5 or last_five != ["GREEN"] * 5:
             if candle_close_second(last) > 33:
                 return "Compra no 33 armada"
             return "Verde acima MA21 - aguardando fechar apos 33s"
@@ -400,12 +400,12 @@ def detect_ma21_green_buy_at_33(asset: Asset) -> tuple[str | None, str, str | No
     if candle_close_second(anchor) <= 33:
         return None, "Candle verde fechou antes dos 33s", "GREEN"
 
-    previous_three = [candle_color(candle) for candle in closed[-4:-1]]
-    if len(previous_three) == 3 and previous_three == ["GREEN", "GREEN", "GREEN"]:
-        return None, "Antes do verde houve 3 candles verdes seguidos", "GREEN"
+    last_five = [candle_color(candle) for candle in closed[-5:]]
+    if len(last_five) == 5 and last_five == ["GREEN"] * 5:
+        return None, "Compra no 33 bloqueada por 5 candles verdes seguidos", "GREEN"
 
     pattern = (
-        "Verde acima da MA21 fechado apos 33s sem 3 verdes antes; "
+        "Verde acima da MA21 fechado apos 33s sem 5 verdes seguidos; "
         "comprar no segundo 33 com 2 entradas"
     )
     return "CALL", pattern, "GREEN"

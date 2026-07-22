@@ -108,7 +108,7 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
 
         self.assertIsNone(generate_signal(asset))
 
-    def test_green_above_ma21_after_33_without_three_previous_green_signals_call_at_33(self) -> None:
+    def test_green_above_ma21_after_33_without_five_green_sequence_signals_call_at_33(self) -> None:
         candles = [candle("RED", index) for index in range(20)]
         candles.append(candle("GREEN", 20, update_timestamp=34))
         asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
@@ -120,9 +120,17 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
         self.assertEqual(signal.max_entries, 2)
         self.assertEqual(signal.entry_second, 33)
 
-    def test_green_above_ma21_strategy_rejects_three_previous_green_candles(self) -> None:
+    def test_green_above_ma21_strategy_allows_three_previous_green_candles(self) -> None:
         candles = [candle("RED", index) for index in range(17)]
         candles.extend(candle("GREEN", index) for index in range(17, 20))
+        candles.append(candle("GREEN", 20, update_timestamp=34))
+        asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
+
+        self.assertIsNotNone(generate_signal(asset))
+
+    def test_green_above_ma21_strategy_rejects_five_green_candles_in_sequence(self) -> None:
+        candles = [candle("RED", index) for index in range(16)]
+        candles.extend(candle("GREEN", index) for index in range(16, 20))
         candles.append(candle("GREEN", 20, update_timestamp=34))
         asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
 
