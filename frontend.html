@@ -1402,7 +1402,7 @@
             </button>
           </li>
           <li>
-            <button id="navBroker" class="nav-btn" onclick="showBrokerPage()">
+            <button id="navBroker" class="nav-btn hidden" onclick="showBrokerPage()">
               <i class="fa-solid fa-chart-line"></i> BullEx Ao Vivo
             </button>
           </li>
@@ -1941,8 +1941,12 @@
     }
 
     function showBrokerPage() {
+      if (!connected) {
+        showLogin();
+        return;
+      }
       setPage("brokerPage", "BullEx Ao Vivo");
-      if (connected) startPolling();
+      startPolling();
     }
 
     function reloadBrokerFrame() {
@@ -2112,7 +2116,7 @@
       $("navLogin").classList.remove("hidden");
       $("navInicio").classList.add("hidden");
       $("navSequences").classList.add("hidden");
-      $("navBroker").classList.remove("hidden");
+      $("navBroker").classList.add("hidden");
       $("navSettings").classList.add("hidden");
       $("btnExitSidebar").classList.add("hidden");
       
@@ -2278,7 +2282,7 @@
           $("navLogin").classList.remove("hidden");
           $("navInicio").classList.add("hidden");
           $("navSequences").classList.add("hidden");
-          $("navBroker").classList.remove("hidden");
+          $("navBroker").classList.add("hidden");
           $("navSettings").classList.add("hidden");
           $("btnExitSidebar").classList.add("hidden");
           if (currentActivePage !== "loginPage") showLogin();
