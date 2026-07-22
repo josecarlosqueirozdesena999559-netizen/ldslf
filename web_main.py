@@ -3,6 +3,7 @@
 import threading
 import time
 import json
+import queue
 import uuid
 from dataclasses import replace
 from datetime import datetime, timedelta
@@ -37,6 +38,7 @@ app = FastAPI(title="AndersonAnalisesTrader")
 SETTINGS_FILE = Path("data/web_settings.json")
 MANUAL_ENTRIES_FILE = Path("data/manual_entries.json")
 SESSION_SCORE_FILE = Path("data/session_score.json")
+LOGIN_TIMEOUT_SECONDS = 35
 
 
 class LoginPayload(BaseModel):
@@ -222,7 +224,7 @@ class WebBot:
         with self.lock:
             self.status = f"Conectando em {account_mode}"
         client = BullExClient()
-        ok, error = client.connect(email, password, account_mode)
+        ok, error = self.connect_with_timeout(client, email, password, account_mode)
         if not ok:
             with self.lock:
                 self.connected = False
@@ -240,6 +242,22 @@ class WebBot:
             self.status = "Login realizado"
             self.start_scheduler()
         return True, None
+
+    def connect_with_timeout(self, client: BullExClient, email: str, password: str, account_mode: str) -> tuple[bool, str | None]:
+        result_queue: queue.Queue[tuple[bool, str | None]] = queue.Queue(maxsize=1)
+
+        def connect_worker() -> None:
+            try:
+                result_queue.put(client.connect(email, password, account_mode))
+            except Exception as exc:
+                result_queue.put((False, str(exc)))
+
+        worker = threading.Thread(target=connect_worker, daemon=True)
+        worker.start()
+        try:
+            return result_queue.get(timeout=LOGIN_TIMEOUT_SECONDS)
+        except queue.Empty:
+            return False, "Tempo limite ao conectar na BullEx. Verifique senha, bloqueio por IP/VPS ou sessão aberta em outro lugar."
 
     def start(self, auto_trade: bool = True, reset_stats: bool = True) -> tuple[bool, str | None]:
         with self.lock:
