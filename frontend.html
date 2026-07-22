@@ -479,7 +479,16 @@
     }
     function showLogin(){ if (connected) { showSettings(); return; } setPage("loginPage", "Login BullEx"); }
     function showMenu(){ showSettings(); }
-    function showMonitor(){ if (!connected) { showLogin(); return; } setPage("monitorPage", "Análise em tempo real"); startPolling(); }
+    async function showMonitor(){
+      if (!connected) { showLogin(); return; }
+      setPage("monitorPage", "Análise em tempo real");
+      startPolling();
+      const data = await request("/api/state");
+      if (!data.running && !data.starting) {
+        await request("/api/monitor", {method:"POST"});
+      }
+      await refresh();
+    }
     function showSequences(){
       if (!connected) { showLogin(); return; }
       setPage("sequencesPage", "Sequências por hora");
@@ -523,7 +532,8 @@
         if (!connected) showLogin(); else showSettings();
         return;
       }
-      showMonitor();
+      setPage("monitorPage", "Análise em tempo real");
+      startPolling();
       await refresh();
     }
     async function stopBot(){ await request("/api/stop", {method:"POST"}); await refresh(); }

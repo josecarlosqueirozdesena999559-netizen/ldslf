@@ -263,7 +263,7 @@ class WebBot:
         with self.lock:
             if not self.client or not self.connected:
                 return False, "Faça login primeiro."
-            if not self.settings_saved:
+            if auto_trade and not self.settings_saved:
                 self.status = "Salve as configuracoes antes de iniciar"
                 return False, "Salve as configuracoes antes de iniciar."
             if self.running or self.starting:
