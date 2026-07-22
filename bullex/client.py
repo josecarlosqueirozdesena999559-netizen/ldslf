@@ -5,6 +5,7 @@ import threading
 import time
 from typing import Any
 
+from bullexapi import global_value
 from bullexapi.stable_api import Bullex
 
 from config import ASSET_PRIORITY, DEFAULT_ASSET_LIMIT, TIMEFRAMES
@@ -21,6 +22,7 @@ class BullExClient:
 
     def connect(self, email: str, password: str, account_mode: str) -> tuple[bool, str | None]:
         api_mode = self._to_api_mode(account_mode)
+        self._reset_global_session()
         self.api = Bullex(email, password, active_account_type=api_mode)
         ok, message = self.api.connect()
         if not ok:
@@ -30,6 +32,14 @@ class BullExClient:
         self.connected = bool(self.api.check_connect())
         self.account_mode = account_mode
         return self.connected, None
+
+    @staticmethod
+    def _reset_global_session() -> None:
+        global_value.SSID = None
+        global_value.balance_id = None
+        global_value.check_websocket_if_connect = None
+        global_value.check_websocket_if_error = False
+        global_value.websocket_error_reason = None
 
     def disconnect(self) -> None:
         if self.api:
