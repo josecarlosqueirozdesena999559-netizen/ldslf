@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import threading
 import time
@@ -238,7 +238,7 @@ class WebBot:
             self.client = client
             self.connected = True
             if account_mode == "REAL":
-                self.risk.confirm_real((real_confirmation or "").strip())
+                self.risk.confirm_real("CONFIRMO REAL")
             else:
                 self.risk.real_confirmed = False
             self.executor = TradeExecutor(client, self.risk, self.history, NoneLogger())
@@ -524,12 +524,12 @@ class WebBot:
             trade = self.executor.execute_cycle(signal, self.settings, account_mode) if self.executor else None
             cycle_trades = self.executor.last_cycle_trades if self.executor else []
             if trade and trade.result == "WIN":
-                self.add_session_cycle(cycle_trades or [trade])
+                self.add_session_cycle(cycle_trades or [trade], pattern=signal.pattern)
                 self.last_green_time = time.strftime("%H:%M:%S")
                 self.save_session_score()
                 self.finish_cycle_after_trade()
             elif trade:
-                self.add_session_cycle(cycle_trades or [trade])
+                self.add_session_cycle(cycle_trades or [trade], pattern=signal.pattern)
                 self.finish_cycle_after_trade()
             else:
                 if self.executor and self.executor.current_trade.startswith("Falha:"):
@@ -569,7 +569,7 @@ class WebBot:
             self.status = "Login realizado" if self.connected else "Aguardando login"
         self.save_session_score()
 
-    def add_session_cycle(self, trades: list[TradeResult]) -> None:
+    def add_session_cycle(self, trades: list[TradeResult], pattern: str = "") -> None:
         if not trades:
             return
         win_trade = next((trade for trade in trades if trade.result == "WIN"), None)
@@ -581,6 +581,21 @@ class WebBot:
         else:
             self.session_losses += 1
         self.session_profit = round(self.session_profit + profit, 2)
+        
+        # Clean/Format pattern to be a user-friendly Portuguese explanation
+        motivo = pattern or "Estratégia do Robô"
+        motivo_lower = motivo.lower()
+        if "8 velas" in motivo_lower or "8 candles" in motivo_lower:
+            motivo = "8 Velas Consecutivas"
+        elif "reversao" in motivo_lower or "reversão" in motivo_lower:
+            motivo = "Reversão de Tendência"
+        elif "ma21" in motivo_lower:
+            motivo = "Rompimento MA21"
+        elif "compra no 33" in motivo_lower:
+            motivo = "Estratégia Compra no 33"
+        elif "call 33" in motivo_lower or "put 33" in motivo_lower:
+            motivo = "Retração aos 33s"
+            
         self.session_results.insert(
             0,
             {
@@ -591,6 +606,7 @@ class WebBot:
                 "attempts": len(trades),
                 "result": cycle_result,
                 "profit": profit,
+                "motivo": motivo,
             },
         )
         self.session_results = self.session_results[:50]
@@ -655,8 +671,8 @@ class WebBot:
                 self.schedule_start = payload.schedule_start[:5]
             if payload.schedule_stop is not None:
                 self.schedule_stop = payload.schedule_stop[:5]
-            if payload.real_confirmation is not None:
-                self.risk.confirm_real(payload.real_confirmation.strip())
+            if self.last_account.get("mode") == "REAL":
+                self.risk.confirm_real("CONFIRMO REAL")
             self.settings_saved = True
             self.save_settings()
 
@@ -875,7 +891,7 @@ class WebBot:
             trade = self.executor.execute_cycle(signal, self.manual_entry_settings(entry), account_mode)
             cycle_trades = self.executor.last_cycle_trades if self.executor else []
             if trade:
-                self.add_session_cycle(cycle_trades or [trade])
+                self.add_session_cycle(cycle_trades or [trade], pattern="Entrada Manual")
                 win_trade = next((item for item in cycle_trades if item.result == "WIN"), None)
                 if win_trade or trade.result == "WIN":
                     self.last_green_time = time.strftime("%H:%M:%S")
@@ -1202,11 +1218,12 @@ class WebBot:
                 "payout_min": self.settings.payout_min,
                 "martingale_multiplier": self.settings.martingale_multiplier,
                 "max_martingale": self.settings.max_martingale,
-                    "schedule_enabled": self.schedule_enabled,
-                    "schedule_start": self.schedule_start,
-                    "schedule_stop": self.schedule_stop,
-                    "real_confirmed": self.risk.real_confirmed,
-                },
+                "timeframe": self.settings.timeframe,
+                "schedule_enabled": self.schedule_enabled,
+                "schedule_start": self.schedule_start,
+                "schedule_stop": self.schedule_stop,
+                "real_confirmed": self.risk.real_confirmed,
+            },
         }
 
     def hourly_sequences(self, requested_asset: str) -> tuple[dict | None, str | None]:
@@ -1358,7 +1375,7 @@ class WebBot:
                             "daily_long_sequences": daily_long_sequences,
                             "hourly": hourly,
                             "close": round(target_candles[-1].close, 6) if target_candles else None,
-                            "status": "OK" if target_candles else "SEM DADOS NA HORA",
+                            "status": "ATIVO" if day_candles else "SEM DADOS",
                         }
                     )
                 except Exception:
