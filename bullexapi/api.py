@@ -793,7 +793,8 @@ class BullexAPI(object):  # pylint: disable=too-many-instance-attributes
                                                  "check_hostname": False, "cert_reqs": ssl.CERT_NONE, "ca_certs": "cacert.pem"}})  # for fix pyinstall error: cafile, capath and cadata cannot be all omitted
         self.websocket_thread.daemon = True
         self.websocket_thread.start()
-        while True:
+        start = time.time()
+        while time.time() - start < 12:
             try:
                 if global_value.check_websocket_if_error:
                     return False, global_value.websocket_error_reason
@@ -803,8 +804,8 @@ class BullexAPI(object):  # pylint: disable=too-many-instance-attributes
                     return True, None
             except:
                 pass
-
-            pass
+            time.sleep(0.02)
+        return False, "Websocket timeout ao conectar."
 
     # @tokensms.setter
     def setTokenSMS(self, response):
@@ -834,8 +835,11 @@ class BullexAPI(object):  # pylint: disable=too-many-instance-attributes
     def send_ssid(self):
         self.profile.msg = None
         self.ssid(global_value.SSID)  # pylint: disable=not-callable
-        while self.profile.msg == None:
-            pass
+        start = time.time()
+        while self.profile.msg == None and time.time() - start < 8:
+            time.sleep(0.02)
+        if self.profile.msg == None:
+            return False
         if self.profile.msg == False:
             return False
         else:
@@ -887,12 +891,16 @@ class BullexAPI(object):  # pylint: disable=too-many-instance-attributes
             self.session.cookies, {"ssid": global_value.SSID})
 
         self.timesync.server_timestamp = None
-        while True:
+        start = time.time()
+        while time.time() - start < 8:
             try:
                 if self.timesync.server_timestamp != None:
                     break
             except:
                 pass
+            time.sleep(0.02)
+        else:
+            return False, "Timesync timeout ao conectar."
         return True, None
 
     def connect2fa(self, sms_code):

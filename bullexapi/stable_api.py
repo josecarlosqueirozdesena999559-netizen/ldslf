@@ -108,8 +108,11 @@ class Bullex:
             self.re_subscribe_stream()
 
             # ---------for async get name: "position-changed", microserviceName
-            while global_value.balance_id == None:
-                pass
+            start = time.time()
+            while global_value.balance_id == None and time.time() - start < 8:
+                time.sleep(0.02)
+            if global_value.balance_id == None:
+                return False, "Balance timeout ao conectar."
 
             self.position_change_all(
                 "subscribeMessage", global_value.balance_id)
