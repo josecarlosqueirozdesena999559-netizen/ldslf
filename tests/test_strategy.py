@@ -143,9 +143,13 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
 
         self.assertIsNone(generate_signal(asset))
 
-    def test_negative_at_33_then_green_close_after_three_same_color_signals_call(self) -> None:
-        candles = [candle("RED", index) for index in range(3)]
-        candles.append(candle("GREEN", 3, negative_at_33=True))
+    def test_green_breaks_ma21_then_next_negative_at_33_green_close_signals_call(self) -> None:
+        candles = [
+            Candle(open=1.0, close=1.0, high=1.01, low=0.99, timestamp=index)
+            for index in range(20)
+        ]
+        candles.append(Candle(open=0.9, close=1.1, high=1.12, low=0.88, timestamp=20))
+        candles.append(Candle(open=1.0, close=1.2, high=1.21, low=0.8, timestamp=21, negative_at_33=True))
         asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
 
         signal = generate_signal(asset)
@@ -153,18 +157,28 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
         self.assertIsNotNone(signal)
         self.assertEqual(signal.direction, "CALL")
         self.assertEqual(signal.max_entries, 2)
+        self.assertIsNone(signal.entry_second)
+        self.assertIn("rompeu a MA21", signal.pattern)
         self.assertIn("negativo aos 33s", signal.pattern)
 
-    def test_negative_at_33_strategy_requires_three_previous_same_color_candles(self) -> None:
-        candles = [candle("RED", 0), candle("GREEN", 1), candle("RED", 2)]
-        candles.append(candle("GREEN", 3, negative_at_33=True))
+    def test_negative_at_33_strategy_requires_previous_green_ma21_break(self) -> None:
+        candles = [
+            Candle(open=1.0, close=1.0, high=1.01, low=0.99, timestamp=index)
+            for index in range(20)
+        ]
+        candles.append(Candle(open=1.05, close=1.1, high=1.12, low=1.0, timestamp=20))
+        candles.append(Candle(open=1.0, close=1.2, high=1.21, low=0.8, timestamp=21, negative_at_33=True))
         asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
 
         self.assertIsNone(generate_signal(asset))
 
     def test_negative_at_33_strategy_requires_negative_marker(self) -> None:
-        candles = [candle("RED", index) for index in range(3)]
-        candles.append(candle("GREEN", 3))
+        candles = [
+            Candle(open=1.0, close=1.0, high=1.01, low=0.99, timestamp=index)
+            for index in range(20)
+        ]
+        candles.append(Candle(open=0.9, close=1.1, high=1.12, low=0.88, timestamp=20))
+        candles.append(Candle(open=1.0, close=1.2, high=1.21, low=0.8, timestamp=21))
         asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
 
         self.assertIsNone(generate_signal(asset))

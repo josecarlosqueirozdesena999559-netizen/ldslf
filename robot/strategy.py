@@ -177,9 +177,6 @@ def describe_strategy_watch(asset: Asset) -> str:
     ma21_33_status = describe_ma21_break_33_watch(asset)
     if ma21_33_status:
         return ma21_33_status
-    negative_33_status = describe_negative_33_green_close_watch(asset)
-    if negative_33_status:
-        return negative_33_status
     return "Analisando"
 
 
@@ -221,20 +218,6 @@ def describe_ma21_watch(closed: list[Candle]) -> str | None:
     return None
 
 
-def previous_same_color_count(candles: list[Candle], end_index: int) -> tuple[str | None, int]:
-    if end_index <= 0:
-        return None, 0
-    color = candle_color(candles[end_index - 1])
-    if color == "DOJI":
-        return color, 1
-    count = 0
-    for candle in reversed(candles[:end_index]):
-        if candle_color(candle) != color:
-            break
-        count += 1
-    return color, count
-
-
 def red_breaks_ma21_down(candles: list[Candle], index: int) -> bool:
     if index < 0 or index >= len(candles):
         return False
@@ -245,11 +228,30 @@ def red_breaks_ma21_down(candles: list[Candle], index: int) -> bool:
     return ma21 is not None and candle.open >= ma21 and candle.close < ma21
 
 
+def green_breaks_ma21_up(candles: list[Candle], index: int) -> bool:
+    if index < 0 or index >= len(candles):
+        return False
+    candle = candles[index]
+    if candle_color(candle) != "GREEN":
+        return False
+    ma21 = moving_average_at(candles, index)
+    return ma21 is not None and candle.open <= ma21 and candle.close > ma21
+
+
 def describe_ma21_break_33_watch(asset: Asset) -> str | None:
     closed = [candle for candle in asset.candles if candle.closed]
     current = asset.current_candle
     if not current or current.closed or not closed:
         return None
+    if green_breaks_ma21_up(closed, len(closed) - 1):
+        if getattr(current, "negative_at_33", False):
+            return "MA21 rompida para cima - candle negativo aos 33s, aguardando fechar verde"
+        current_second = int(current.update_timestamp or current.timestamp) - int(current.timestamp)
+        if current_second < 33:
+            return "MA21 rompida para cima - aguardando candle ficar negativo aos 33s"
+        if current.close < current.open:
+            return "MA21 rompida para cima - candle negativo aos 33s"
+        return "MA21 rompida para cima - aguardando fechamento verde"
     if not red_breaks_ma21_down(closed, len(closed) - 1):
         return None
     if getattr(current, "positive_at_33", False):
@@ -260,26 +262,6 @@ def describe_ma21_break_33_watch(asset: Asset) -> str | None:
     if current.close > current.open:
         return "MA21 rompida - candle verde aos 33s"
     return "MA21 rompida - aguardando fechamento vermelho"
-
-
-def describe_negative_33_green_close_watch(asset: Asset) -> str | None:
-    closed = [candle for candle in asset.candles if candle.closed]
-    current = asset.current_candle
-    if current and not current.closed:
-        color, count = previous_same_color_count(closed, len(closed))
-        if count >= 3:
-            if getattr(current, "negative_at_33", False):
-                return f"33 negativo marcado apos {count} candles da mesma cor"
-            if getattr(current, "positive_at_33", False):
-                return f"33 positivo marcado apos {count} candles da mesma cor"
-            current_second = int(current.update_timestamp or current.timestamp) - int(current.timestamp)
-            if current_second < 33:
-                return f"Aguardando 33s apos {count} candles da mesma cor"
-            if current.close < current.open:
-                return f"Candle negativo aos 33s apos {count} candles da mesma cor"
-            if current.close > current.open:
-                return f"Candle positivo aos 33s apos {count} candles da mesma cor"
-    return None
 
 
 def detect_eight_candle_reversal(asset: Asset) -> tuple[str | None, str, str | None]:
@@ -411,10 +393,10 @@ def detect_ma21_green_buy_at_33(asset: Asset) -> tuple[str | None, str, str | No
     return "CALL", pattern, "GREEN"
 
 
-def detect_negative_33_green_close_call(asset: Asset) -> tuple[str | None, str, str | None]:
+def detect_ma21_green_break_negative_33_green_close_call(asset: Asset) -> tuple[str | None, str, str | None]:
     closed = [candle for candle in asset.candles if candle.closed]
-    if len(closed) < 4:
-        return None, "Aguardando 3 candles iguais e candle de virada", None
+    if len(closed) < MOVING_AVERAGE_PERIOD + 1:
+        return None, f"Aguardando {MOVING_AVERAGE_PERIOD + 1} candles para rompimento MA21 e virada 33", None
 
     anchor_index = len(closed) - 1
     anchor = closed[anchor_index]
@@ -423,14 +405,19 @@ def detect_negative_33_green_close_call(asset: Asset) -> tuple[str | None, str, 
     if not getattr(anchor, "negative_at_33", False):
         return None, "Aguardando candle que estava negativo aos 33s", "GREEN"
 
-    previous_color, previous_count = previous_same_color_count(closed, anchor_index)
-    if previous_count < 3 or previous_color == "DOJI":
-        return None, "Aguardando 3 candles ou mais da mesma cor antes da virada", previous_color
+    break_index = anchor_index - 1
+    break_candle = closed[break_index]
+    if candle_color(break_candle) != "GREEN":
+        return None, "Aguardando candle verde antes da virada 33", candle_color(break_candle)
 
-    label = "verdes" if previous_color == "GREEN" else "vermelhos"
+    if moving_average_at(closed, break_index) is None:
+        return None, "Aguardando MA21 real no candle de rompimento", "GREEN"
+    if not green_breaks_ma21_up(closed, break_index):
+        return None, "Candle verde anterior nao rompeu a MA21 para cima", "GREEN"
+
     pattern = (
-        f"{previous_count} candles {label}; candle estava negativo aos 33s "
-        "e fechou verde positivo; CALL com G1 se necessario"
+        "Candle verde rompeu a MA21 para cima; candle seguinte ficou negativo "
+        "aos 33s e fechou verde positivo; CALL com G1 se necessario"
     )
     return "CALL", pattern, "GREEN"
 
@@ -493,7 +480,7 @@ def collect_strategy_signals(asset: Asset) -> list[Signal]:
             )
         )
 
-    direction, pattern, sequence_color = detect_negative_33_green_close_call(asset)
+    direction, pattern, sequence_color = detect_ma21_green_break_negative_33_green_close_call(asset)
     if direction:
         signals.append(
             make_signal(
