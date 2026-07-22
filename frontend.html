@@ -312,31 +312,8 @@
     .login-container {
       max-width: 440px;
       width: 100%;
-      margin: 8vh auto;
+      margin: 5vh auto;
       text-align: center;
-    }
-
-    .login-logo {
-      margin-bottom: 25px;
-      display: inline-flex;
-      align-items: center;
-      gap: 10px;
-      font-family: var(--font-title);
-      font-size: 24px;
-      font-weight: 800;
-      color: var(--text);
-      text-transform: uppercase;
-      letter-spacing: 1px;
-    }
-
-    .login-logo i {
-      color: var(--accent);
-      font-size: 28px;
-      filter: drop-shadow(0 0 10px var(--accent));
-    }
-
-    .login-logo span {
-      color: var(--accent);
     }
 
     .login-card {
@@ -438,14 +415,14 @@
       margin: 0 auto;
       display: flex;
       flex-direction: column;
-      gap: 25px;
+      gap: 16px;
       width: 100%;
     }
 
     .dashboard-grid {
       display: grid;
       grid-template-columns: 1.25fr 0.75fr;
-      gap: 25px;
+      gap: 16px;
       width: 100%;
     }
     @media (max-width: 900px) {
@@ -493,7 +470,7 @@
 
     .radar-title {
       font-family: var(--font-title);
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 700;
       letter-spacing: 1px;
       color: var(--text-muted);
@@ -506,10 +483,10 @@
 
     .radar-subtitle {
       font-family: var(--font-title);
-      font-size: 14px;
+      font-size: 13px;
       font-weight: 600;
       color: var(--accent);
-      margin-bottom: 20px;
+      margin-bottom: 10px;
       display: flex;
       align-items: center;
       gap: 6px;
@@ -517,10 +494,10 @@
 
     .radar-wrapper {
       position: relative;
-      width: 300px;
-      height: 300px;
+      width: 230px;
+      height: 230px;
       max-width: 100%;
-      margin: 10px auto;
+      margin: 4px auto;
       border-radius: 50%;
       border: 1px dashed rgba(255, 102, 0, 0.15);
       padding: 10px;
@@ -609,8 +586,8 @@
       background: rgba(18, 18, 26, 0.65);
       border: 1px solid var(--panel-border);
       border-radius: 10px;
-      padding: 12px 16px;
-      margin-top: 20px;
+      padding: 10px 12px;
+      margin-top: 12px;
       font-size: 13px;
     }
 
@@ -621,7 +598,7 @@
       text-transform: uppercase;
       letter-spacing: 0.8px;
       display: block;
-      margin-bottom: 8px;
+      margin-bottom: 4px;
       text-align: center;
     }
 
@@ -656,7 +633,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: 420px;
+      min-height: 340px;
       animation: fadeIn 0.4s ease;
     }
 
@@ -1453,7 +1430,7 @@
     <!-- Main Content -->
     <main class="main-content">
       <div class="header-bar">
-        <h1 class="page-title" id="pageTitle">Conexão BullEx</h1>
+        <h1 class="page-title" id="pageTitle"></h1>
         <div class="header-info">
           <div class="conn-badge">
             <span id="connIndicatorDot" class="status-dot"></span>
@@ -1468,11 +1445,7 @@
 
       <!-- PAGE: LOGIN -->
       <section id="loginPage" class="login-container">
-        <div class="login-logo">
-          <i class="fa-solid fa-crosshairs"></i> ANDERSON<span>ANÁLISES TRADER</span>
-        </div>
         <div class="panel login-card">
-          <h2>Entrar na BullEx</h2>
           <div class="form-group">
             <label for="email">E-mail</label>
             <input id="email" type="email" class="input-field" autocomplete="username" placeholder="seuemail@exemplo.com" />
@@ -1499,7 +1472,7 @@
           
           <div class="dashboard-grid">
             <!-- Left Column: Active Radar / Entry Panel -->
-            <div id="radarCardPanel" class="panel" style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 460px; padding: 25px; transition: all 0.5s ease;">
+            <div id="radarCardPanel" class="panel" style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 360px; padding: 18px; transition: all 0.5s ease;">
               
               <!-- SUB-STATE 1: Radar (Scanning) -->
               <div id="radarStatePanel" class="radar-panel-scanning" style="width: 100%;">
@@ -1608,18 +1581,18 @@
             </div>
 
             <!-- Right Column: Unified Performance Card -->
-            <div class="panel" style="display: flex; flex-direction: column; gap: 20px; min-height: 460px;">
+            <div class="panel" style="display: flex; flex-direction: column; gap: 12px; min-height: 360px; padding: 18px;">
               <h2 class="panel-title" style="margin-bottom: 5px;"><i class="fa-solid fa-chart-pie"></i> Desempenho da Sessão</h2>
               
               <!-- Profit Display -->
-              <div style="background: rgba(26, 26, 36, 0.45); border: 1px solid var(--panel-border); border-radius: 12px; padding: 22px 15px; text-align: center;">
+              <div style="background: rgba(26, 26, 36, 0.45); border: 1px solid var(--panel-border); border-radius: 12px; padding: 14px 12px; text-align: center;">
                 <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); display: block; margin-bottom: 5px;">Saldo Líquido Sessão</span>
-                <strong id="statsTotalProfit" style="font-family: var(--font-title); font-size: 34px; font-weight: 800; line-height: 1;">R$ 0,00</strong>
+                <strong id="statsTotalProfit" style="font-family: var(--font-title); font-size: 28px; font-weight: 800; line-height: 1;">R$ 0,00</strong>
               </div>
 
               <!-- Progress bar & wins / losses counts -->
-              <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 15px; align-items: center; background: rgba(26, 26, 36, 0.2); border: 1px solid var(--panel-border); border-radius: 12px; padding: 15px;">
-                <div style="position: relative; width: 85px; height: 85px; margin: 0 auto;">
+              <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 12px; align-items: center; background: rgba(26, 26, 36, 0.2); border: 1px solid var(--panel-border); border-radius: 12px; padding: 12px;">
+                <div style="position: relative; width: 72px; height: 72px; margin: 0 auto;">
                   <div class="circular-progress win" style="width: 100%; height: 100%;">
                     <svg viewBox="0 0 100 100">
                       <circle cx="50" cy="50" r="40" class="bg-circle" />
@@ -1930,7 +1903,7 @@
         showInicioPage();
         return;
       }
-      setPage("loginPage", "Conexão BullEx");
+      setPage("loginPage", "");
     }
 
     async function showInicioPage() {
