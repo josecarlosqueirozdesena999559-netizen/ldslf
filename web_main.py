@@ -402,7 +402,6 @@ class WebBot:
             key = self.signal_key(asset, signal)
             if key in self.used_signal_keys:
                 continue
-            self.used_signal_keys.add(key)
             return signal
         return None
 
@@ -502,6 +501,7 @@ class WebBot:
                 if self.executor:
                     self.executor.current_trade = self.status
                 return
+            self.used_signal_keys.add(self.signal_key_for_signal(signal))
             self.operation_open = True
             self.focused_asset = signal.asset
             self.status = f"Operando: {signal.pattern}"
@@ -527,6 +527,7 @@ class WebBot:
                     self.executor.current_trade = "Aguardando outro sinal"
                     self.update_focus_asset()
                     self.last_signal = None
+                    self.used_signal_keys.discard(self.signal_key_for_signal(signal))
                 elif self.executor and "stop win" in self.executor.current_trade.lower():
                     self.stop_reason = "STOP WIN atingido. Robô parado."
                     self.status = self.stop_reason
@@ -536,6 +537,8 @@ class WebBot:
                     self.status = self.stop_reason
                     self.running = False
                 else:
+                    if self.executor and self.executor.current_trade == "Aguardando outro sinal":
+                        self.used_signal_keys.discard(self.signal_key_for_signal(signal))
                     self.status = "Escaneando ativos em tempo real / aguardando sinal"
         finally:
             with self.lock:
@@ -1041,6 +1044,12 @@ class WebBot:
         closed = [candle for candle in asset.candles if candle.closed]
         last_timestamp = int(closed[-1].timestamp) if closed else 0
         return (asset.name, signal.direction, signal.pattern, last_timestamp)
+
+    def signal_key_for_signal(self, signal: Signal) -> tuple:
+        asset = self.asset_by_name(signal.asset)
+        if asset:
+            return self.signal_key(asset, signal)
+        return (signal.asset, signal.direction, signal.pattern, int(signal.timestamp.timestamp()))
 
     @staticmethod
     def format_seconds(seconds: int) -> str:
