@@ -590,19 +590,7 @@ class WebBot:
             self.session_losses += 1
         self.session_profit = round(self.session_profit + profit, 2)
         
-        # Clean/Format pattern to be a user-friendly Portuguese explanation
         motivo = pattern or "Estratégia do Robô"
-        motivo_lower = motivo.lower()
-        if "8 velas" in motivo_lower or "8 candles" in motivo_lower:
-            motivo = "8 Velas Consecutivas"
-        elif "reversao" in motivo_lower or "reversão" in motivo_lower:
-            motivo = "Reversão de Tendência"
-        elif "ma21" in motivo_lower:
-            motivo = "Rompimento MA21"
-        elif "compra no 33" in motivo_lower:
-            motivo = "Estratégia Compra no 33"
-        elif "call 33" in motivo_lower or "put 33" in motivo_lower:
-            motivo = "Retração aos 33s"
             
         self.session_results.insert(
             0,
@@ -1384,7 +1372,7 @@ class WebBot:
                             "daily_long_sequences": daily_long_sequences,
                             "hourly": hourly,
                             "close": round(target_candles[-1].close, 6) if target_candles else None,
-                            "status": "ATIVO" if day_candles else "SEM DADOS",
+                            "status": "ATIVO" if day_candles else "AGUARDANDO",
                         }
                     )
                 except Exception:
@@ -1407,7 +1395,7 @@ class WebBot:
                                 for index, key in enumerate(hour_keys)
                             ],
                             "close": None,
-                            "status": "INDISPONÍVEL",
+                            "status": "AGUARDANDO",
                         }
                     )
 
@@ -1565,10 +1553,14 @@ def api_hourly_sequences(asset: str = ""):
 
 @app.get("/api/monitored-hourly-sequences")
 def api_monitored_hourly_sequences(force: bool = False):
-    result, error = bot.monitored_hourly_sequences(force=force)
+    try:
+        result, error = bot.monitored_hourly_sequences(force=force)
+    except Exception as exc:
+        logger.exception("Falha na rota de sequencias por hora")
+        return JSONResponse({"ok": False, "error": f"Falha ao buscar sequencias: {exc}"})
     if error:
-        return JSONResponse({"ok": False, "error": error}, status_code=400)
-    return JSONResponse(result)
+        return JSONResponse({"ok": False, "error": error})
+    return JSONResponse(result or {"ok": False, "error": "Sem dados de sequencias no momento."})
 
 
 HTML = r"""

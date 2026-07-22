@@ -1491,7 +1491,6 @@
                     </g>
                     
                     <g id="radarActiveTarget" class="radar-target-group hidden">
-                      <circle id="radarTargetDot" cx="100" cy="100" r="3.2" fill="#ffffff" filter="url(#centerGlow)" />
                       <text id="radarTargetText" x="106" y="102" fill="var(--accent)" font-size="6.8" font-family="monospace" font-weight="bold" filter="url(#centerGlow)">-</text>
                     </g>
                     
@@ -2079,7 +2078,9 @@
         $("sequenceMsg").textContent = `Dados atualizados às ${data.updated_at}`;
         
         // Summary Render
-        $("sequenceSummaryRows").innerHTML = data.assets.map(row => {
+        const assets = Array.isArray(data.assets) ? data.assets : [];
+        const hours = Array.isArray(data.hours) ? data.hours : [];
+        $("sequenceSummaryRows").innerHTML = assets.map(row => {
           const payout = Number(row.payout || 0) > 0 ? `${row.payout}%` : "-";
           const maxVal = row.daily_max || 0;
           let cls = row.color === "GREEN" ? "green" : row.color === "RED" ? "red" : "doji";
@@ -2097,11 +2098,12 @@
         }).join("");
 
         // Grid columns Header (hours)
-        $("sequenceHistoryHead").innerHTML = `<tr><th>Ativo</th>${data.hours.map(h => `<th>${h}</th>`).join("")}</tr>`;
+        $("sequenceHistoryHead").innerHTML = `<tr><th>Ativo</th>${hours.map(h => `<th>${h}</th>`).join("")}</tr>`;
         
         // Grid Rows
-        $("sequenceHistoryRows").innerHTML = data.assets.map(row => {
-          const cells = row.hourly.map(hour => {
+        $("sequenceHistoryRows").innerHTML = assets.map(row => {
+          const rowHours = Array.isArray(row.hourly) ? row.hourly : [];
+          const cells = rowHours.map(hour => {
             const cls = hour.color === "GREEN" ? "green" : hour.color === "RED" ? "red" : "doji";
             const hot = Number(hour.sequence || 0) >= 11 ? " hot" : "";
             return `<td><span class="sequence-hour-cell ${cls}${hot}">${hour.sequence}</span></td>`;
@@ -2111,7 +2113,7 @@
         
         $("sequenceResults").classList.remove("hidden");
       } catch (err) {
-        $("sequenceMsg").textContent = "Erro na conexão ao buscar sequências.";
+        $("sequenceMsg").textContent = `Erro ao buscar sequências: ${err?.message || "verifique o servidor"}`;
       } finally {
         if (btn) btn.disabled = false;
       }
@@ -2164,11 +2166,7 @@
         targetX = 100 + radius * Math.cos(angleRad);
         targetY = 100 + radius * Math.sin(angleRad);
 
-        const dot = $("radarTargetDot");
         const txt = $("radarTargetText");
-        
-        dot.setAttribute("cx", targetX);
-        dot.setAttribute("cy", targetY);
         
         txt.setAttribute("x", targetX + 6);
         txt.setAttribute("y", targetY + 2.5);
@@ -2438,7 +2436,7 @@
         const dirCls = row.position === "CALL" ? "call" : "put";
         const dirLbl = row.position === "CALL" ? "COMPRA" : "VENDA";
         const profit = Number(row.profit || 0);
-        const motivo = row.motivo || "8 Velas Consecutivas";
+        const motivo = row.motivo || "Estratégia do robô";
         return `
           <tr>
             <td>${row.time || "-"}</td>
