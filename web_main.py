@@ -267,6 +267,11 @@ class WebBot:
                 self.status = "Salve as configuracoes antes de iniciar"
                 return False, "Salve as configuracoes antes de iniciar."
             if self.running or self.starting:
+                if auto_trade and not self.auto_trade:
+                    self.auto_trade = True
+                    self.status = "Operando automaticamente / aguardando sinal"
+                elif not auto_trade and self.auto_trade:
+                    self.status = "Robo ja esta operando automaticamente"
                 return True, None
             self.starting = True
             self.manual_paused = False
@@ -1153,6 +1158,7 @@ class WebBot:
         return {
             "connected": self.connected,
             "running": self.running,
+            "auto_trade": self.auto_trade,
             "starting": self.starting,
             "paused": paused,
             "status": self.status,

@@ -685,7 +685,7 @@
       $("navLogin").classList.toggle("hidden", data.connected);
       $("connDot").classList.toggle("on", data.connected);
       $("connText").textContent = data.connected ? "Conectado" : "Desconectado";
-      $("sysStatus").textContent = data.running ? "Online" : data.connected ? "Conectado" : "Offline";
+      $("sysStatus").textContent = data.running ? (data.auto_trade ? "Online operando" : "Monitorando sem operar") : data.connected ? "Conectado" : "Offline";
       $("sysAccount").textContent = data.connected ? `${data.account.mode || "-"} ${data.account.currency || ""} ${Number(data.account.balance || 0).toFixed(2)}` : "-";
       $("menuAccount").textContent = data.connected ? `Conta: ${data.account.mode || "-"} | Saldo: ${data.account.currency || ""} ${Number(data.account.balance || 0).toFixed(2)}` : "Conecte sua conta para iniciar.";
       $("balance").textContent = data.connected ? `${data.account.currency || ""} ${Number(data.account.balance || 0).toFixed(2)}` : "-";
@@ -824,9 +824,10 @@
     function updateActionButtons(data = null){
       const connectedNow = data ? data.connected : connected;
       const running = Boolean(data?.running);
+      const operating = running && Boolean(data?.auto_trade);
       const manualPaused = Boolean(data?.manual_paused);
       const saved = Boolean(data?.settings_saved) && !settingsDirty;
-      $("btnStartBot").disabled = !connectedNow || !saved || running;
+      $("btnStartBot").disabled = !connectedNow || !saved || operating;
       $("btnPauseBot").disabled = !connectedNow || !running;
       $("btnResumeBot").disabled = !connectedNow || !manualPaused || running || !saved;
       $("btnStopBot").disabled = !connectedNow || !running;
