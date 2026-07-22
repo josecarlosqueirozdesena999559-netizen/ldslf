@@ -20,7 +20,7 @@ STRATEGY_PATTERN_MARKERS = (
     "operar contra tendencia nas velas 5, 6 e 7",
     "comprar no segundo 33",
     "negativo aos 33s e fechou verde positivo",
-    "positivo aos 33s e fechou vermelho negativo",
+    "rompeu a ma21",
 )
 
 
@@ -174,6 +174,9 @@ def describe_strategy_watch(asset: Asset) -> str:
     ma21_status = describe_ma21_watch(closed)
     if ma21_status:
         return ma21_status
+    ma21_33_status = describe_ma21_break_33_watch(asset)
+    if ma21_33_status:
+        return ma21_33_status
     negative_33_status = describe_negative_33_green_close_watch(asset)
     if negative_33_status:
         return negative_33_status
@@ -230,6 +233,33 @@ def previous_same_color_count(candles: list[Candle], end_index: int) -> tuple[st
             break
         count += 1
     return color, count
+
+
+def red_breaks_ma21_down(candles: list[Candle], index: int) -> bool:
+    if index < 0 or index >= len(candles):
+        return False
+    candle = candles[index]
+    if candle_color(candle) != "RED":
+        return False
+    ma21 = moving_average_at(candles, index)
+    return ma21 is not None and candle.open >= ma21 and candle.close < ma21
+
+
+def describe_ma21_break_33_watch(asset: Asset) -> str | None:
+    closed = [candle for candle in asset.candles if candle.closed]
+    current = asset.current_candle
+    if not current or current.closed or not closed:
+        return None
+    if not red_breaks_ma21_down(closed, len(closed) - 1):
+        return None
+    if getattr(current, "positive_at_33", False):
+        return "MA21 rompida - candle verde aos 33s, aguardando fechar vermelho"
+    current_second = int(current.update_timestamp or current.timestamp) - int(current.timestamp)
+    if current_second < 33:
+        return "MA21 rompida - aguardando candle ficar verde aos 33s"
+    if current.close > current.open:
+        return "MA21 rompida - candle verde aos 33s"
+    return "MA21 rompida - aguardando fechamento vermelho"
 
 
 def describe_negative_33_green_close_watch(asset: Asset) -> str | None:
@@ -405,10 +435,10 @@ def detect_negative_33_green_close_call(asset: Asset) -> tuple[str | None, str, 
     return "CALL", pattern, "GREEN"
 
 
-def detect_positive_33_red_close_put(asset: Asset) -> tuple[str | None, str, str | None]:
+def detect_ma21_red_break_positive_33_red_close_put(asset: Asset) -> tuple[str | None, str, str | None]:
     closed = [candle for candle in asset.candles if candle.closed]
-    if len(closed) < 4:
-        return None, "Aguardando 3 candles iguais e candle de virada", None
+    if len(closed) < MOVING_AVERAGE_PERIOD + 1:
+        return None, f"Aguardando {MOVING_AVERAGE_PERIOD + 1} candles para rompimento MA21 e virada 33", None
 
     anchor_index = len(closed) - 1
     anchor = closed[anchor_index]
@@ -417,14 +447,19 @@ def detect_positive_33_red_close_put(asset: Asset) -> tuple[str | None, str, str
     if not getattr(anchor, "positive_at_33", False):
         return None, "Aguardando candle que estava positivo aos 33s", "RED"
 
-    previous_color, previous_count = previous_same_color_count(closed, anchor_index)
-    if previous_count < 3 or previous_color == "DOJI":
-        return None, "Aguardando 3 candles ou mais da mesma cor antes da virada", previous_color
+    break_index = anchor_index - 1
+    break_candle = closed[break_index]
+    if candle_color(break_candle) != "RED":
+        return None, "Aguardando candle vermelho antes da virada 33", candle_color(break_candle)
 
-    label = "verdes" if previous_color == "GREEN" else "vermelhos"
+    if moving_average_at(closed, break_index) is None:
+        return None, "Aguardando MA21 real no candle de rompimento", "RED"
+    if not red_breaks_ma21_down(closed, break_index):
+        return None, "Candle vermelho anterior nao rompeu a MA21 para baixo", "RED"
+
     pattern = (
-        f"{previous_count} candles {label}; candle estava positivo aos 33s "
-        "e fechou vermelho negativo; PUT com G1 se necessario"
+        "Candle vermelho rompeu a MA21 para baixo; candle seguinte ficou verde "
+        "aos 33s e fechou vermelho negativo; PUT com G1 se necessario"
     )
     return "PUT", pattern, "RED"
 
@@ -471,7 +506,7 @@ def collect_strategy_signals(asset: Asset) -> list[Signal]:
             )
         )
 
-    direction, pattern, sequence_color = detect_positive_33_red_close_put(asset)
+    direction, pattern, sequence_color = detect_ma21_red_break_positive_33_red_close_put(asset)
     if direction:
         signals.append(
             make_signal(

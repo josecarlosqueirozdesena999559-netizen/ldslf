@@ -1091,7 +1091,7 @@ class WebBot:
         return {
             "asset": None,
             "title": "Escaneando estrategias sem ordem fixa",
-            "detail": "8 candles, reversao, continuacao, MA21 contra, compra no segundo 33 e viradas aos 33s",
+            "detail": "8 candles, reversao, continuacao, MA21 contra, compra no segundo 33 e rompimento MA21 aos 33s",
         }
 
     def state(self) -> dict:
@@ -1144,7 +1144,7 @@ class WebBot:
             "settings_saved": self.settings_saved,
             "account": self.last_account,
             "strategy": "8 candles",
-            "strategy_detail": "Reversao: 2 candles contrarios e entradas 3/4/5. Continuacao: 3 candles iguais e entradas 4/5/6. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde acima da MA21 fechado depois de 33s, sem 3 verdes antes, com 2 entradas. Virada 33 CALL: depois de 3+ candles da mesma cor, candle fica negativo aos 33s e fecha verde positivo, CALL com G1. Virada 33 PUT: depois de 3+ candles da mesma cor, candle fica positivo aos 33s e fecha vermelho negativo, PUT no inicio do proximo candle com G1. Sempre com martingale dobrando.",
+            "strategy_detail": "Reversao: 2 candles contrarios e entradas 3/4/5. Continuacao: 3 candles iguais e entradas 4/5/6. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde acima da MA21 fechado depois de 33s, sem 3 verdes antes, com 2 entradas. Virada 33 CALL: depois de 3+ candles da mesma cor, candle fica negativo aos 33s e fecha verde positivo, CALL com G1. PUT 33 MA21: candle vermelho rompe a MA21 para baixo; candle seguinte fica verde aos 33s e fecha vermelho negativo, PUT com G1. Sempre com martingale dobrando.",
             "strategy_moment": strategy_moment["title"],
             "strategy_moment_detail": strategy_moment["detail"],
             "target_sequence": self.active_strategy,
