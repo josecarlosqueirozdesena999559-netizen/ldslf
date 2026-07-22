@@ -6,7 +6,7 @@ import json
 import queue
 import uuid
 from dataclasses import replace
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -39,6 +39,10 @@ SETTINGS_FILE = Path("data/web_settings.json")
 MANUAL_ENTRIES_FILE = Path("data/manual_entries.json")
 SESSION_SCORE_FILE = Path("data/session_score.json")
 LOGIN_TIMEOUT_SECONDS = 35
+
+
+def bullex_now() -> datetime:
+    return datetime.now(timezone.utc) - timedelta(hours=3)
 
 
 class LoginPayload(BaseModel):
@@ -1229,7 +1233,7 @@ class WebBot:
                 candles.extend(batch)
                 endtime = min(item.timestamp for item in batch) - 1
 
-            cutoff = datetime.now(candles[0].time.tzinfo) - timedelta(hours=24) if candles else None
+            cutoff = bullex_now() - timedelta(hours=24) if candles else None
             unique = {
                 candle.timestamp: candle
                 for candle in candles
@@ -1244,7 +1248,7 @@ class WebBot:
                 "ok": True,
                 "asset": asset,
                 "period": "Últimas 24 horas",
-                "updated_at": datetime.now().strftime("%H:%M:%S"),
+                "updated_at": bullex_now().strftime("%H:%M:%S"),
                 "total_candles": len(unique),
                 "best": best,
                 "long_sequences": count_long_sequence_milestones(list(unique.values())),
@@ -1266,7 +1270,7 @@ class WebBot:
             for name in ASSET_PRIORITY
         ]
         asset_names = tuple(asset.name for asset in monitored)
-        now = datetime.now()
+        now = bullex_now()
         target_time = now.replace(minute=0, second=0, microsecond=0)
         target_key = target_time.strftime("%Y-%m-%d %H:00")
         day_start = target_time.replace(hour=0)
@@ -1393,7 +1397,7 @@ class WebBot:
                 "ok": True,
                 "period": f"{target_time.strftime('%d/%m %H:00')}–{target_time.strftime('%H:59')}",
                 "day": target_time.strftime("%d/%m/%Y"),
-                "updated_at": datetime.now().strftime("%H:%M:%S"),
+                "updated_at": bullex_now().strftime("%H:%M:%S"),
                 "next_update": (target_time + timedelta(hours=1)).strftime("%H:00"),
                 "long_sequence_totals": long_sequence_totals,
                 "hours": [hour.strftime("%H:00") for hour in hour_times],
