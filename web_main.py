@@ -315,6 +315,12 @@ class WebBot:
 
     def logout(self) -> None:
         self.stop()
+        client = self.client
+        if client:
+            try:
+                client.disconnect()
+            except Exception as exc:
+                logger.warning("Falha ao deslogar da BullEx: %s", exc)
         with self.lock:
             self.client = None
             self.executor = None

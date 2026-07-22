@@ -536,7 +536,13 @@
       await refresh();
     }
     async function stopBot(){ await request("/api/stop", {method:"POST"}); await refresh(); }
-    async function logout(){ await request("/api/logout", {method:"POST"}); connected = false; showLogin(); await refresh(); }
+    async function logout(){
+      const data = await request("/api/logout", {method:"POST"});
+      if (!data.ok) return;
+      connected = false;
+      showLogin();
+      await refresh();
+    }
     async function pauseBot(){ await request("/api/pause", {method:"POST"}); await refresh(); }
     async function resumeBot(){ await request("/api/resume", {method:"POST"}); await refresh(); }
     async function resetStops(){
