@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import logging
 import threading
 import time
@@ -27,7 +28,7 @@ class BullExClient:
         ok, message = self.api.connect()
         if not ok:
             self.connected = False
-            return False, message
+            return False, self._normalize_login_error(message)
         self.api.change_balance(api_mode)
         self.connected = bool(self.api.check_connect())
         self.account_mode = account_mode
@@ -40,6 +41,50 @@ class BullExClient:
         global_value.check_websocket_if_connect = None
         global_value.check_websocket_if_error = False
         global_value.websocket_error_reason = None
+
+    @staticmethod
+    def _normalize_login_error(message: Any) -> str:
+        if message == "2FA":
+            return "A BullEx pediu verificacao para essa conta. Entre direto no site/app da BullEx com esse usuario e confirme a conta antes de usar no robo."
+
+        raw = "" if message is None else str(message)
+        payload: Any = None
+        try:
+            payload = json.loads(raw)
+        except (TypeError, ValueError):
+            payload = None
+
+        text_parts = [raw]
+        if isinstance(payload, dict):
+            for key in ("message", "error", "code", "reason", "detail"):
+                value = payload.get(key)
+                if value is not None:
+                    text_parts.append(str(value))
+        text = " ".join(text_parts).lower()
+
+        credential_markers = (
+            "credential",
+            "credentials",
+            "credenciais",
+            "invalid_login",
+            "invalid credentials",
+            "invalid identifier",
+            "invalid password",
+            "usuario ou senha",
+            "usuário ou senha",
+            "email or password",
+            "e-mail ou senha",
+            "senha invalida",
+            "senha inválida",
+        )
+        if any(marker in text for marker in credential_markers):
+            return "Credenciais invalidas: confira o e-mail e a senha desse usuario na BullEx."
+
+        code_markers = ("invalid code", "codigo invalido", "código inválido", "invalid verification")
+        if any(marker in text for marker in code_markers):
+            return "A BullEx recusou a verificacao dessa conta. Entre direto no site/app da BullEx com esse usuario e depois tente no robo."
+
+        return raw or "Falha no login da BullEx."
 
     def disconnect(self) -> None:
         if self.api:
