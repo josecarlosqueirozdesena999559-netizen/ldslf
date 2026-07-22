@@ -191,11 +191,9 @@ def describe_ma21_watch(closed: list[Candle]) -> str | None:
         return None
 
     if candle_color(last) == "GREEN" and last.close > ma21:
-        last_five = [candle_color(candle) for candle in closed[-5:]]
-        if len(last_five) < 5 or last_five != ["GREEN"] * 5:
-            if candle_close_second(last) > 33:
-                return "Compra no 33 armada"
-            return "Verde acima MA21 - aguardando fechar apos 33s"
+        if candle_close_second(last) > 33:
+            return "Compra no 33 armada"
+        return "Verde acima MA21 - aguardando fechar apos 33s"
 
     if len(closed) >= MOVING_AVERAGE_PERIOD + 1:
         for green_count in range(1, 4):
@@ -382,12 +380,8 @@ def detect_ma21_green_buy_at_33(asset: Asset) -> tuple[str | None, str, str | No
     if candle_close_second(anchor) <= 33:
         return None, "Candle verde fechou antes dos 33s", "GREEN"
 
-    last_five = [candle_color(candle) for candle in closed[-5:]]
-    if len(last_five) == 5 and last_five == ["GREEN"] * 5:
-        return None, "Compra no 33 bloqueada por 5 candles verdes seguidos", "GREEN"
-
     pattern = (
-        "Verde acima da MA21 fechado apos 33s sem 5 verdes seguidos; "
+        "Verde acima da MA21 fechado apos 33s; "
         "comprar no segundo 33 com 2 entradas"
     )
     return "CALL", pattern, "GREEN"
@@ -417,7 +411,7 @@ def detect_ma21_green_break_negative_33_green_close_call(asset: Asset) -> tuple[
 
     pattern = (
         "Candle verde rompeu a MA21 para cima; candle seguinte ficou negativo "
-        "aos 33s e fechou verde positivo; CALL com G1 se necessario"
+        "aos 33s e fechou verde positivo; CALL em uma entrada nas velas 3, 4 ou 5"
     )
     return "CALL", pattern, "GREEN"
 
@@ -446,7 +440,7 @@ def detect_ma21_red_break_positive_33_red_close_put(asset: Asset) -> tuple[str |
 
     pattern = (
         "Candle vermelho rompeu a MA21 para baixo; candle seguinte ficou verde "
-        "aos 33s e fechou vermelho negativo; PUT com G1 se necessario"
+        "aos 33s e fechou vermelho negativo; PUT em uma entrada nas velas 3, 4 ou 5"
     )
     return "PUT", pattern, "RED"
 
@@ -489,7 +483,7 @@ def collect_strategy_signals(asset: Asset) -> list[Signal]:
                 pattern,
                 sequence_color,
                 NEGATIVE_33_GREEN_CLOSE_WINDOW_SECONDS,
-                max_entries=2,
+                max_entries=1,
             )
         )
 
@@ -502,7 +496,7 @@ def collect_strategy_signals(asset: Asset) -> list[Signal]:
                 pattern,
                 sequence_color,
                 NEGATIVE_33_GREEN_CLOSE_WINDOW_SECONDS,
-                max_entries=2,
+                max_entries=1,
             )
         )
 

@@ -456,6 +456,7 @@ class WebBot:
         best = max(
             ready,
             key=lambda asset: (
+                self.asset_recency_score(asset),
                 self.visual_sequence_count(asset),
                 1 if asset.open else 0,
                 asset.payout,
@@ -463,6 +464,14 @@ class WebBot:
             ),
         )
         self.focused_asset = best.name
+
+    @staticmethod
+    def asset_recency_score(asset: Asset) -> int:
+        current = asset.current_candle
+        if not current:
+            return 0
+        updated_at = int(current.update_timestamp or current.timestamp)
+        return max(0, 120 - (int(time.time()) - updated_at))
 
     def find_best_signal(self) -> Signal | None:
         return self.find_signal_for_sequences(mark_used=False)
@@ -1144,7 +1153,7 @@ class WebBot:
             "settings_saved": self.settings_saved,
             "account": self.last_account,
             "strategy": "8 candles",
-            "strategy_detail": "Reversao: 2 candles contrarios e entradas 3/4/5. Continuacao: 3 candles iguais e entradas 4/5/6. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde acima da MA21 fechado depois de 33s, sem completar 5 verdes seguidos, com 2 entradas. CALL 33 MA21: candle verde rompe a MA21 para cima; candle seguinte fica negativo aos 33s e fecha verde positivo, CALL com G1. PUT 33 MA21: candle vermelho rompe a MA21 para baixo; candle seguinte fica verde aos 33s e fecha vermelho negativo, PUT com G1. Sempre com martingale dobrando.",
+            "strategy_detail": "Reversao: 2 candles contrarios e entradas 3/4/5. Continuacao: 3 candles iguais e entradas 4/5/6. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde acima da MA21 fechado depois de 33s, com 2 entradas. CALL 33 MA21: candle verde rompe a MA21 para cima; candle seguinte fica negativo aos 33s e fecha verde positivo, uma CALL nas velas 3/4/5. PUT 33 MA21: candle vermelho rompe a MA21 para baixo; candle seguinte fica verde aos 33s e fecha vermelho negativo, uma PUT nas velas 3/4/5. Sempre com martingale dobrando.",
             "strategy_moment": strategy_moment["title"],
             "strategy_moment_detail": strategy_moment["detail"],
             "target_sequence": self.active_strategy,
@@ -1243,7 +1252,7 @@ class WebBot:
         ]
         asset_names = tuple(asset.name for asset in monitored)
         now = datetime.now()
-        target_time = now.replace(minute=0, second=0, microsecond=0) - timedelta(hours=1)
+        target_time = now.replace(minute=0, second=0, microsecond=0)
         target_key = target_time.strftime("%Y-%m-%d %H:00")
         day_start = target_time.replace(hour=0)
         hour_times = [day_start + timedelta(hours=hour) for hour in range(target_time.hour + 1)]
@@ -1285,7 +1294,8 @@ class WebBot:
                     ]
                     analyzed = analyze_hourly_sequences(day_candles)
                     by_hour = {item["key"]: item for item in analyzed}
-                    sequence = by_hour.get(target_key, {
+                    fallback_sequence = max(analyzed, key=lambda item: item["key"]) if analyzed else None
+                    sequence = by_hour.get(target_key) or fallback_sequence or {
                         "sequence": 0,
                         "color": "DOJI",
                         "start": "-",
@@ -1293,7 +1303,7 @@ class WebBot:
                         "candles": 0,
                         "average": 0,
                         "sequence_count": 0,
-                    })
+                    }
                     hourly = [
                         {
                             "key": key,
@@ -1329,7 +1339,7 @@ class WebBot:
                             "daily_long_sequences": daily_long_sequences,
                             "hourly": hourly,
                             "close": round(target_candles[-1].close, 6) if target_candles else None,
-                            "status": "OK" if target_candles else "SEM DADOS",
+                            "status": "OK" if target_candles else "SEM DADOS NA HORA",
                         }
                     )
                 except Exception:
@@ -1369,7 +1379,7 @@ class WebBot:
                 "period": f"{target_time.strftime('%d/%m %H:00')}–{target_time.strftime('%H:59')}",
                 "day": target_time.strftime("%d/%m/%Y"),
                 "updated_at": datetime.now().strftime("%H:%M:%S"),
-                "next_update": (target_time + timedelta(hours=2)).strftime("%H:00"),
+                "next_update": (target_time + timedelta(hours=1)).strftime("%H:00"),
                 "long_sequence_totals": long_sequence_totals,
                 "hours": [hour.strftime("%H:00") for hour in hour_times],
                 "assets": rows,
