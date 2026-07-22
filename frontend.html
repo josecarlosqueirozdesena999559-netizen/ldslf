@@ -267,6 +267,47 @@
       display: none !important;
     }
 
+    .broker-panel {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      min-height: calc(100vh - 130px);
+      padding: 18px;
+    }
+
+    .broker-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+
+    .broker-frame-wrap {
+      flex: 1;
+      min-height: 620px;
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #050508;
+      position: relative;
+    }
+
+    .broker-frame {
+      width: 100%;
+      height: 100%;
+      min-height: 620px;
+      border: 0;
+      display: block;
+      background: #050508;
+    }
+
+    .broker-fallback {
+      color: var(--text-muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
     /* LOGIN PAGE */
     .login-container {
       max-width: 440px;
@@ -1384,6 +1425,11 @@
             </button>
           </li>
           <li>
+            <button id="navBroker" class="nav-btn hidden" onclick="showBrokerPage()">
+              <i class="fa-solid fa-chart-line"></i> BullEx Ao Vivo
+            </button>
+          </li>
+          <li>
             <button id="navSettings" class="nav-btn hidden" onclick="showSettingsPage()">
               <i class="fa-solid fa-sliders"></i> Configurações
             </button>
@@ -1708,6 +1754,34 @@
       </section>
 
       <!-- PAGE: CONFIGURAÇÕES & ENTRADAS MANUAIS -->
+      <section id="brokerPage" class="hidden">
+        <div class="panel broker-panel">
+          <div class="broker-toolbar">
+            <div>
+              <h2 class="panel-title" style="margin-bottom: 5px;"><i class="fa-solid fa-chart-line"></i> BullEx Ao Vivo</h2>
+              <p class="broker-fallback">Acompanhe a sala da BullEx dentro do painel enquanto o robo continua monitorando.</p>
+            </div>
+            <button onclick="reloadBrokerFrame()" class="btn-refresh">
+              <i class="fa-solid fa-rotate"></i> Recarregar Sala
+            </button>
+          </div>
+          <div class="broker-frame-wrap">
+            <iframe
+              id="brokerFrame"
+              class="broker-frame"
+              src="https://trade.bull-ex.com/traderoom"
+              title="BullEx Traderoom"
+              referrerpolicy="no-referrer-when-downgrade"
+              allow="clipboard-read; clipboard-write; fullscreen"
+            ></iframe>
+          </div>
+          <p class="broker-fallback">
+            Se a pagina da BullEx nao aparecer, o proprio site pode estar bloqueando exibicao dentro de outro painel. Nesse caso use Recarregar Sala ou abra a traderoom em uma aba separada.
+            <a href="https://trade.bull-ex.com/traderoom" target="_blank" rel="noopener noreferrer" style="color: var(--accent); font-weight: 700;">Abrir BullEx</a>
+          </p>
+        </div>
+      </section>
+
       <section id="settingsPage" class="hidden">
         <div class="panel">
           <div class="tabs-header">
@@ -1834,11 +1908,12 @@
     let targetX = 100;
     let targetY = 100;
 
-    const pages = ["loginPage", "inicioPage", "sequencesPage", "settingsPage"];
+    const pages = ["loginPage", "inicioPage", "sequencesPage", "brokerPage", "settingsPage"];
     const navs = {
       loginPage: "navLogin",
       inicioPage: "navInicio",
       sequencesPage: "navSequences",
+      brokerPage: "navBroker",
       settingsPage: "navSettings"
     };
 
@@ -1892,6 +1967,21 @@
       startPolling();
     }
 
+    function showBrokerPage() {
+      if (!connected) {
+        showLogin();
+        return;
+      }
+      setPage("brokerPage", "BullEx Ao Vivo");
+      startPolling();
+    }
+
+    function reloadBrokerFrame() {
+      const frame = $("brokerFrame");
+      if (!frame) return;
+      frame.src = "https://trade.bull-ex.com/traderoom";
+    }
+
     function switchSettingsTab(tab) {
       if (tab === 'parameters') {
         $("tabBtnParameters").classList.add("active");
@@ -1941,6 +2031,7 @@
         $("navLogin").classList.add("hidden");
         $("navInicio").classList.remove("hidden");
         $("navSequences").classList.remove("hidden");
+        $("navBroker").classList.remove("hidden");
         $("navSettings").classList.remove("hidden");
         $("btnExitSidebar").classList.remove("hidden");
 
@@ -2052,6 +2143,7 @@
       $("navLogin").classList.remove("hidden");
       $("navInicio").classList.add("hidden");
       $("navSequences").classList.add("hidden");
+      $("navBroker").classList.add("hidden");
       $("navSettings").classList.add("hidden");
       $("btnExitSidebar").classList.add("hidden");
       
@@ -2209,10 +2301,17 @@
           $("navLogin").classList.add("hidden");
           $("navInicio").classList.remove("hidden");
           $("navSequences").classList.remove("hidden");
+          $("navBroker").classList.remove("hidden");
           $("navSettings").classList.remove("hidden");
           $("btnExitSidebar").classList.remove("hidden");
         } else {
           connected = false;
+          $("navLogin").classList.remove("hidden");
+          $("navInicio").classList.add("hidden");
+          $("navSequences").classList.add("hidden");
+          $("navBroker").classList.add("hidden");
+          $("navSettings").classList.add("hidden");
+          $("btnExitSidebar").classList.add("hidden");
           if (currentActivePage !== "loginPage") showLogin();
           return;
         }

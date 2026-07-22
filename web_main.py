@@ -39,6 +39,7 @@ SETTINGS_FILE = Path("data/web_settings.json")
 MANUAL_ENTRIES_FILE = Path("data/manual_entries.json")
 SESSION_SCORE_FILE = Path("data/session_score.json")
 LOGIN_TIMEOUT_SECONDS = 35
+BOT_LOOP_IDLE_SECONDS = 0.20
 
 
 def bullex_now() -> datetime:
@@ -216,6 +217,7 @@ class WebBot:
         self.lock = threading.Lock()
         self.thread: threading.Thread | None = None
         self.trade_thread: threading.Thread | None = None
+        self.session_token = ""
         self.analysis_lock = threading.Lock()
         self.sequence_cache: dict[str, tuple[float, dict]] = {}
         self.monitored_sequence_cache: tuple[str, tuple[str, ...], dict] | None = None
@@ -235,6 +237,7 @@ class WebBot:
                 self.status = f"Falha no login: {error}"
             return False, error
         with self.lock:
+            self.session_token = uuid.uuid4().hex
             self.client = client
             self.connected = True
             if account_mode == "REAL":
@@ -323,14 +326,13 @@ class WebBot:
                 self.client.stop_candles_stream(asset.name, self.settings.timeframe)
 
     def logout(self) -> None:
-        self.stop()
-        client = self.client
-        if client:
-            try:
-                client.disconnect()
-            except Exception as exc:
-                logger.warning("Falha ao deslogar da BullEx: %s", exc)
         with self.lock:
+            client = self.client
+            assets = list(self.assets)
+            timeframe = self.settings.timeframe
+            self.running = False
+            self.starting = False
+            self.session_token = uuid.uuid4().hex
             self.client = None
             self.executor = None
             self.assets = []
@@ -345,6 +347,23 @@ class WebBot:
             self.status = "Aguardando login"
             self.last_account = {"connected": False, "mode": "DEMO", "currency": "", "balance": 0.0}
             self.settings_saved = False
+        if client:
+            self.disconnect_in_background(client, assets, timeframe)
+
+    @staticmethod
+    def disconnect_in_background(client: BullExClient, assets: list[Asset], timeframe: str) -> None:
+        def worker() -> None:
+            for asset in assets:
+                try:
+                    client.stop_candles_stream(asset.name, timeframe)
+                except Exception:
+                    pass
+            try:
+                client.disconnect()
+            except Exception as exc:
+                logger.warning("Falha ao deslogar da BullEx: %s", exc)
+
+        threading.Thread(target=worker, daemon=True).start()
 
     def pause(self) -> None:
         with self.lock:
@@ -359,9 +378,11 @@ class WebBot:
         return self.start(auto_trade=auto_trade, reset_stats=False)
 
     def loop(self) -> None:
+        with self.lock:
+            session_token = self.session_token
         while True:
             with self.lock:
-                if not self.running:
+                if not self.running or session_token != self.session_token:
                     return
 
             if self.auto_trade and not self.operation_open:
@@ -381,7 +402,7 @@ class WebBot:
             if signal and self.auto_trade and not self.operation_open:
                 self.start_trade(signal)
             self.refresh_account_if_due()
-            time.sleep(0.05)
+            time.sleep(BOT_LOOP_IDLE_SECONDS)
 
     def load_initial_candles(self) -> None:
         for asset in self.assets:
@@ -522,14 +543,19 @@ class WebBot:
             self.last_signal = signal
             if self.executor:
                 self.executor.current_trade = f"SINAL ENCONTRADO {signal.direction} {signal.asset} - preparando entrada"
-        self.trade_thread = threading.Thread(target=self.execute_trade, args=(signal,), daemon=True)
+            session_token = self.session_token
+        self.trade_thread = threading.Thread(target=self.execute_trade, args=(signal, session_token), daemon=True)
         self.trade_thread.start()
 
-    def execute_trade(self, signal: Signal) -> None:
+    def execute_trade(self, signal: Signal, session_token: str) -> None:
         try:
+            if session_token != self.session_token:
+                return
             account_mode = str(self.last_account.get("mode") or "DEMO")
             is_reentry = False
             trade = self.executor.execute_cycle(signal, self.settings, account_mode) if self.executor else None
+            if session_token != self.session_token:
+                return
             cycle_trades = self.executor.last_cycle_trades if self.executor else []
             if trade and trade.result == "WIN":
                 self.add_session_cycle(cycle_trades or [trade], pattern=signal.pattern)
@@ -559,8 +585,10 @@ class WebBot:
                     self.status = "Escaneando ativos em tempo real / aguardando sinal"
         finally:
             with self.lock:
-                self.operation_open = False
-            self.refresh_account()
+                if session_token == self.session_token:
+                    self.operation_open = False
+            if session_token == self.session_token:
+                self.refresh_account()
 
     def reset_session_stats(self) -> None:
         self.session_wins = 0
@@ -1618,6 +1646,7 @@ HTML = r"""
     <div class="nav">
       <button class="secondary hidden" id="menuBtn" onclick="showMenu()">Menu inicial</button>
       <button class="danger hidden" id="stopBtn" onclick="stopBot()">Parar</button>
+      <button class="danger hidden" id="logoutBtn" onclick="logout()">Deslogar</button>
     </div>
   </header>
   <main>
@@ -1647,6 +1676,7 @@ HTML = r"""
         <button onclick="startBot()">Monitorar e operar</button>
         <button class="secondary" onclick="monitorOnly()">Somente monitorar</button>
         <button class="secondary" onclick="showResults()">Resultados</button>
+        <button class="danger" onclick="logout()">Deslogar</button>
         <button class="danger" onclick="stopBot()">Parar robô</button>
       </div>
     </section>
@@ -1703,6 +1733,23 @@ HTML = r"""
     const $ = (id) => document.getElementById(id);
     let polling = null;
 
+    function stopPolling() {
+      if (!polling) return;
+      clearInterval(polling);
+      polling = null;
+    }
+
+    function showLogin(message = "") {
+      $("login").classList.remove("hidden");
+      $("menu").classList.add("hidden");
+      $("monitor").classList.add("hidden");
+      $("results").classList.add("hidden");
+      $("menuBtn").classList.add("hidden");
+      $("stopBtn").classList.add("hidden");
+      $("logoutBtn").classList.add("hidden");
+      $("loginMsg").textContent = message;
+    }
+
     function showMenu() {
       $("login").classList.add("hidden");
       $("menu").classList.remove("hidden");
@@ -1710,6 +1757,7 @@ HTML = r"""
       $("results").classList.add("hidden");
       $("menuBtn").classList.remove("hidden");
       $("stopBtn").classList.remove("hidden");
+      $("logoutBtn").classList.remove("hidden");
     }
 
     function showMonitor() {
@@ -1719,6 +1767,7 @@ HTML = r"""
       $("monitor").classList.remove("hidden");
       $("menuBtn").classList.remove("hidden");
       $("stopBtn").classList.remove("hidden");
+      $("logoutBtn").classList.remove("hidden");
     }
 
     function showResults() {
@@ -1728,6 +1777,7 @@ HTML = r"""
       $("results").classList.remove("hidden");
       $("menuBtn").classList.remove("hidden");
       $("stopBtn").classList.remove("hidden");
+      $("logoutBtn").classList.remove("hidden");
     }
 
     async function login() {
@@ -1753,12 +1803,18 @@ HTML = r"""
       $("results").classList.add("hidden");
       $("menuBtn").classList.remove("hidden");
       $("stopBtn").classList.remove("hidden");
+      $("logoutBtn").classList.remove("hidden");
       startPolling();
     }
 
     async function startBot() { await fetch("/api/start", {method:"POST"}); showMonitor(); startPolling(); }
     async function monitorOnly() { await fetch("/api/monitor", {method:"POST"}); showMonitor(); startPolling(); }
     async function stopBot() { await fetch("/api/stop", {method:"POST"}); }
+    async function logout() {
+      stopPolling();
+      await fetch("/api/logout", {method:"POST"});
+      showLogin("Sessao encerrada.");
+    }
 
     function startPolling() {
       if (polling) return;
@@ -1768,6 +1824,11 @@ HTML = r"""
 
     async function refresh() {
       const data = await (await fetch("/api/state")).json();
+      if (!data.connected) {
+        stopPolling();
+        showLogin("");
+        return;
+      }
       $("status").textContent = data.status;
       $("menuAccount").textContent = data.connected ? `Conta: ${data.account.mode || "-"} | Saldo: ${data.account.currency || ""} ${Number(data.account.balance || 0).toFixed(2)}` : "";
       $("balance").textContent = `${data.account.currency || ""} ${Number(data.account.balance || 0).toFixed(2)}`;
