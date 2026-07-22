@@ -2569,8 +2569,25 @@
       $("clockDisplay").textContent = new Date().toLocaleTimeString("pt-BR");
     }, 1000);
 
+    async function initialCheck() {
+      try {
+        const data = await request("/api/state");
+        connected = Boolean(data.connected);
+        if (connected) {
+          setPage("inicioPage", "Painel de Operações");
+          startPolling();
+          await refresh();
+          return;
+        }
+      } catch (err) {
+        connected = false;
+      }
+      showLogin();
+      await refresh();
+    }
+
     // Initial check
-    showLogin();
+    initialCheck();
   </script>
 </body>
 </html>
