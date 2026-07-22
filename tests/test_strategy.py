@@ -156,7 +156,7 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
 
         self.assertIsNotNone(signal)
         self.assertEqual(signal.direction, "CALL")
-        self.assertEqual(signal.max_entries, 1)
+        self.assertEqual(signal.max_entries, 2)
         self.assertIsNone(signal.entry_second)
         self.assertIn("rompeu a MA21", signal.pattern)
         self.assertIn("negativo aos 33s", signal.pattern)
@@ -196,7 +196,7 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
 
         self.assertIsNotNone(signal)
         self.assertEqual(signal.direction, "PUT")
-        self.assertEqual(signal.max_entries, 1)
+        self.assertEqual(signal.max_entries, 2)
         self.assertIsNone(signal.entry_second)
         self.assertIn("rompeu a MA21", signal.pattern)
         self.assertIn("verde aos 33s", signal.pattern)

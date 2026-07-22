@@ -411,7 +411,7 @@ def detect_ma21_green_break_negative_33_green_close_call(asset: Asset) -> tuple[
 
     pattern = (
         "Candle verde rompeu a MA21 para cima; candle seguinte ficou negativo "
-        "aos 33s e fechou verde positivo; CALL em uma entrada nas velas 3, 4 ou 5"
+        "aos 33s e fechou verde positivo; CALL nas velas 3, 4 ou 5 com G1 se necessario"
     )
     return "CALL", pattern, "GREEN"
 
@@ -440,7 +440,7 @@ def detect_ma21_red_break_positive_33_red_close_put(asset: Asset) -> tuple[str |
 
     pattern = (
         "Candle vermelho rompeu a MA21 para baixo; candle seguinte ficou verde "
-        "aos 33s e fechou vermelho negativo; PUT em uma entrada nas velas 3, 4 ou 5"
+        "aos 33s e fechou vermelho negativo; PUT nas velas 3, 4 ou 5 com G1 se necessario"
     )
     return "PUT", pattern, "RED"
 
@@ -483,7 +483,7 @@ def collect_strategy_signals(asset: Asset) -> list[Signal]:
                 pattern,
                 sequence_color,
                 NEGATIVE_33_GREEN_CLOSE_WINDOW_SECONDS,
-                max_entries=1,
+                max_entries=2,
             )
         )
 
@@ -496,7 +496,7 @@ def collect_strategy_signals(asset: Asset) -> list[Signal]:
                 pattern,
                 sequence_color,
                 NEGATIVE_33_GREEN_CLOSE_WINDOW_SECONDS,
-                max_entries=1,
+                max_entries=2,
             )
         )
 
