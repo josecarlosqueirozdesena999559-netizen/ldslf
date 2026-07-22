@@ -115,6 +115,10 @@ class TradeExecutor:
                 self.logger.info("[TRADE] falha ao abrir ordem: %s", order_id)
                 self.current_trade = "Aguardando outro sinal"
                 return last_trade
+            self.current_trade = (
+                f"ORDEM CONFIRMADA {direction} {signal.asset} {attempt_name(step)} "
+                f"R$ {value:.2f}; aguardando resultado"
+            )
 
             result, profit = self.wait_result(order_id)
             balance_after = self.client.get_balance()

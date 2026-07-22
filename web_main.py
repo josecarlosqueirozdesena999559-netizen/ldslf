@@ -366,13 +366,18 @@ class WebBot:
 
             if self.auto_trade and not self.operation_open:
                 signal = self.update_market_and_find_signal()
+            elif self.operation_open:
+                self.update_candles()
+                self.update_focus_asset()
+                signal = self.last_signal
             else:
                 self.update_candles()
                 self.update_focus_asset()
                 signal = self.find_best_signal()
             with self.lock:
-                self.last_signal = signal
-                self.status = "Escaneando ativos em tempo real / aguardando sinal"
+                if not self.operation_open:
+                    self.last_signal = signal
+                    self.status = "Escaneando ativos em tempo real / aguardando sinal"
             if signal and self.auto_trade and not self.operation_open:
                 self.start_trade(signal)
             self.refresh_account_if_due()
@@ -514,6 +519,9 @@ class WebBot:
             self.operation_open = True
             self.focused_asset = signal.asset
             self.status = f"Operando: {signal.pattern}"
+            self.last_signal = signal
+            if self.executor:
+                self.executor.current_trade = f"SINAL ENCONTRADO {signal.direction} {signal.asset} - preparando entrada"
         self.trade_thread = threading.Thread(target=self.execute_trade, args=(signal,), daemon=True)
         self.trade_thread.start()
 
@@ -1179,6 +1187,7 @@ class WebBot:
             "connected": self.connected,
             "running": self.running,
             "auto_trade": self.auto_trade,
+            "operation_open": self.operation_open,
             "starting": self.starting,
             "paused": paused,
             "status": self.status,
