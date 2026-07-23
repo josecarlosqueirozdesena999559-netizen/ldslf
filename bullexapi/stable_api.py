@@ -25,6 +25,7 @@ def nested_dict(n, type):
 
 class Bullex:
     __version__ = api_version
+    poll_interval = 0.05
 
     def __init__(self, email, password, active_account_type="PRACTICE", proxies=None):
         self.size = [1, 5, 10, 15, 30, 60, 120, 300, 600, 900, 1800,
@@ -48,6 +49,20 @@ class Bullex:
         # --start
         # self.connect()
         # this auto function delay too long
+
+    def _wait_for(self, predicate, timeout=30, label="response"):
+        start = time.time()
+        while True:
+            try:
+                value = predicate()
+                if value is not None and value is not False:
+                    return value
+            except Exception:
+                pass
+            if time.time() - start >= timeout:
+                logging.error("**warning** %s timeout after %s sec", label, timeout)
+                return None
+            time.sleep(self.poll_interval)
 
     # --------------------------------------------------------------------------
 
@@ -201,8 +216,8 @@ class Bullex:
     def get_financial_information(self, activeId):
         self.api.financial_information = None
         self.api.get_financial_information(activeId)
-        while self.api.financial_information == None:
-            pass
+        if self._wait_for(lambda: self.api.financial_information, 30, "financial_information") is None:
+            return None
         return self.api.financial_information
 
     def get_leader_board(self, country, from_position, to_position, near_traders_count, user_country_id=0, near_traders_country_count=0, top_country_count=0, top_count=0, top_type=2):
@@ -212,8 +227,8 @@ class Bullex:
         self.api.Get_Leader_Board(country_id, user_country_id, from_position, to_position,
                                   near_traders_country_count, near_traders_count, top_country_count, top_count, top_type)
 
-        while self.api.leaderboard_deals_client == None:
-            pass
+        if self._wait_for(lambda: self.api.leaderboard_deals_client, 30, "leaderboard_deals_client") is None:
+            return None
         return self.api.leaderboard_deals_client
 
     def get_instruments(self, type):
@@ -223,12 +238,12 @@ class Bullex:
         while self.api.instruments == None:
             try:
                 self.api.get_instruments(type)
-                start = time.time()
-                while self.api.instruments == None and time.time() - start < 10:
-                    pass
+                self._wait_for(lambda: self.api.instruments, 10, "instruments")
             except:
                 logging.error('**error** api.get_instruments need reconnect')
                 self.connect()
+            if self.api.instruments is None:
+                return {"instruments": []}
         return self.api.instruments
 
     def instruments_input_to_ACTIVES(self, type):
@@ -251,7 +266,7 @@ class Bullex:
     # _________________________self.api.get_api_option_init_all() wss______________________
     def get_all_init(self):
 
-        while True:
+        for _ in range(3):
             self.api.api_option_init_all_result = None
             while True:
                 try:
@@ -271,11 +286,13 @@ class Bullex:
                         break
                 except:
                     pass
+                time.sleep(self.poll_interval)
             try:
                 if self.api.api_option_init_all_result["isSuccessful"] == True:
                     return self.api.api_option_init_all_result
             except:
                 pass
+        raise TimeoutError("Nao foi possivel carregar init da BullEx.")
 
     def get_all_init_v2(self):
         self.api.api_option_init_all_result_v2 = None
@@ -289,6 +306,7 @@ class Bullex:
             if time.time() - start_t >= 30:
                 logging.error('**warning** get_all_init_v2 late 30 sec')
                 return None
+            time.sleep(self.poll_interval)
         return self.api.api_option_init_all_result_v2
 
         # return OP_code.ACTIVES
@@ -395,8 +413,8 @@ class Bullex:
     # ______________________________________self.api.getprofile() https________________________________
 
     def get_profile_ansyc(self):
-        while self.api.profile.msg == None:
-            pass
+        if self._wait_for(lambda: self.api.profile.msg, 30, "profile") is None:
+            return {}
         return self.api.profile.msg
 
     """def get_profile(self):
@@ -444,8 +462,8 @@ class Bullex:
     def get_balances(self):
         self.api.balances_raw = None
         self.api.get_balances()
-        while self.api.balances_raw == None:
-            pass
+        if self._wait_for(lambda: self.api.balances_raw, 30, "balances") is None:
+            return {"msg": []}
         return self.api.balances_raw
 
     def get_balance_mode(self):
@@ -524,22 +542,21 @@ class Bullex:
 
     def get_candles(self, ACTIVES, interval, count, endtime):
         self.api.candles.candles_data = None
-        while True:
+        for _ in range(3):
             try:
                 if ACTIVES not in OP_code.ACTIVES:
                     print('Asset {} not found on consts'.format(ACTIVES))
                     break
                 self.api.getcandles(
                     OP_code.ACTIVES[ACTIVES], interval, count, endtime)
-                while self.check_connect and self.api.candles.candles_data == None:
-                    pass
+                self._wait_for(lambda: self.api.candles.candles_data, 15, "candles")
                 if self.api.candles.candles_data != None:
                     break
             except:
                 logging.error('**error** get_candles need reconnect')
                 self.connect()
 
-        return self.api.candles.candles_data
+        return self.api.candles.candles_data or []
 
     #######################################################
     # ______________________________________________________
@@ -754,8 +771,8 @@ class Bullex:
 ##############################################################################################
 
     def check_binary_order(self, order_id):
-        while order_id not in self.api.order_binary:
-            pass
+        if self._wait_for(lambda: order_id in self.api.order_binary, 30, "binary_order") is None:
+            return None
         your_order = self.api.order_binary[order_id]
         del self.api.order_binary[order_id]
         return your_order
@@ -789,13 +806,14 @@ class Bullex:
         # Function only work with Options!
 
     def check_win_v4(self, id_number):
-        while True:
-            try:
-                if self.api.socket_option_closed[id_number] != None:
-                    break
-            except:
-                pass
-        x = self.api.socket_option_closed[id_number]
+        closed = self._wait_for(
+            lambda: self.api.socket_option_closed.get(id_number),
+            300,
+            "socket_option_closed",
+        )
+        if closed is None:
+            return "equal", 0
+        x = closed
         msg = x["msg"]
         try:
             profit = float(msg.get("win_amount", 0)) - float(msg.get("sum", 0))
@@ -864,8 +882,7 @@ class Bullex:
             for idx in range(buy_len):
                 self.api.buyv3(
                     price[idx], OP_code.ACTIVES[ACTIVES[idx]], ACTION[idx], expirations[idx], idx)
-            while len(self.api.buy_multi_option) < buy_len:
-                pass
+            self._wait_for(lambda: len(self.api.buy_multi_option) >= buy_len, 8, "buy_multi")
             buy_id = []
             for key in sorted(self.api.buy_multi_option.keys()):
                 try:
@@ -914,6 +931,7 @@ class Bullex:
             if time.time() - start_t >= 8:
                 logging.error('**warning** buy late 8 sec')
                 return False, None
+            time.sleep(self.poll_interval)
 
         return self.api.result, self.api.buy_multi_option[req_id]["id"]
 
@@ -944,6 +962,7 @@ class Bullex:
             if time.time() - start_t >= 8:
                 logging.error('**warning** buy late 8 sec')
                 return False, None
+            time.sleep(self.poll_interval)
 
         return self.api.result, self.api.buy_multi_option[req_id]["id"]
 

@@ -18,6 +18,11 @@ from robot.strategy import CANDLE_LOOKBACK, candle_color, generate_signal, is_al
 from storage.history import HistoryStore
 
 
+MONITOR_POLL_SECONDS = 0.5
+ASSET_UPDATE_SECONDS = 1.0
+CANDLE_LOG_SECONDS = 10.0
+
+
 class RobotEngine:
     def __init__(
         self,
@@ -51,6 +56,8 @@ class RobotEngine:
         self.scan_deadline = 0.0
         self.last_green_time = "-"
         self.last_payout_update = 0.0
+        self.last_asset_update: dict[str, float] = {}
+        self.last_candle_log: dict[str, float] = {}
 
     def start(self) -> None:
         self.state.running = True
@@ -90,7 +97,7 @@ class RobotEngine:
                 if self.auto_trade and not self.operation_open:
                     self.handle_auto_trade(signal)
                 live.update(self.update_live_panels())
-                time.sleep(0.05)
+                time.sleep(MONITOR_POLL_SECONDS)
 
     def handle_auto_trade(self, signal: Signal | None) -> None:
         self.state.status = "Escaneando ativos em tempo real / aguardando sinal"
@@ -131,6 +138,10 @@ class RobotEngine:
 
     def update_asset_candles(self, asset, update_payout: bool) -> None:
         try:
+            now = time.time()
+            if now - self.last_asset_update.get(asset.name, 0.0) < ASSET_UPDATE_SECONDS:
+                return
+            self.last_asset_update[asset.name] = now
             if update_payout:
                 asset.payout = self.client.get_payout(asset.name)
                 asset.open = asset.payout >= self.settings.payout_min
@@ -138,9 +149,11 @@ class RobotEngine:
                 return
             asset.candles = self.client.get_realtime_candles(asset.name, self.settings.timeframe, CANDLE_LOOKBACK)
             self.mark_negative_at_33(asset)
-            closed = [candle for candle in asset.candles if candle.closed]
-            colors = " ".join(candle_color(candle) for candle in closed[-5:])
-            self.logger.info("[CANDLE] %s ultimos 5: %s", asset.name, colors or "-")
+            if now - self.last_candle_log.get(asset.name, 0.0) >= CANDLE_LOG_SECONDS:
+                self.last_candle_log[asset.name] = now
+                closed = [candle for candle in asset.candles if candle.closed]
+                colors = " ".join(candle_color(candle) for candle in closed[-5:])
+                self.logger.info("[CANDLE] %s ultimos 5: %s", asset.name, colors or "-")
         except Exception as exc:
             self.logger.info("[CANDLE] falha %s: %s", asset.name, exc)
 
