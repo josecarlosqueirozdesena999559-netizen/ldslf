@@ -445,6 +445,38 @@ def detect_ma21_green_buy_at_33(asset: Asset) -> tuple[str | None, str, str | No
     return "CALL", pattern, "GREEN"
 
 
+def detect_ma21_red_sell_at_33(asset: Asset) -> tuple[str | None, str, str | None]:
+    closed = [candle for candle in asset.candles if candle.closed]
+    if len(closed) < MOVING_AVERAGE_PERIOD:
+        return None, f"Aguardando {MOVING_AVERAGE_PERIOD} candles para MA21", None
+
+    anchor_index = len(closed) - 1
+    anchor = closed[anchor_index]
+    if candle_color(anchor) != "RED":
+        return None, "Aguardando candle vermelho abaixo da MA21", candle_color(anchor)
+
+    ma21 = moving_average_at(closed, anchor_index)
+    if ma21 is None:
+        return None, "Aguardando MA21 real no candle vermelho", "RED"
+    if anchor.close >= ma21:
+        return None, "Candle vermelho nao fechou abaixo da MA21", "RED"
+    if not red_breaks_ma21_down(closed, anchor_index):
+        return None, "Candle vermelho nao rompeu a MA21 para baixo", "RED"
+    previous_red_count = previous_same_color_count(closed, anchor_index, "RED")
+    if previous_red_count < 1:
+        return None, "Aguardando 1 ou 2 candles vermelhos antes do rompimento MA21", "RED"
+    if previous_red_count > 2:
+        return None, "Rompimento MA21 bloqueado: 3 ou mais vermelhos antes", "RED"
+    if candle_close_second(anchor) <= 33:
+        return None, "Candle vermelho fechou antes dos 33s", "RED"
+
+    pattern = (
+        "Vermelho rompeu a MA21 para baixo e terminou abaixo apos 33s; somente 1 ou 2 "
+        "candles negativos antes; operar vendido no segundo 33 com entrada e G1"
+    )
+    return "PUT", pattern, "RED"
+
+
 def detect_ma21_green_break_negative_33_green_close_call(asset: Asset) -> tuple[str | None, str, str | None]:
     closed = [candle for candle in asset.candles if candle.closed]
     if len(closed) < MOVING_AVERAGE_PERIOD + 1:
@@ -527,6 +559,20 @@ def collect_strategy_signals(asset: Asset) -> list[Signal]:
         signals.append(make_signal(asset, direction, pattern, sequence_color, MA21_WICKLESS_WINDOW_SECONDS))
 
     direction, pattern, sequence_color = detect_ma21_green_buy_at_33(asset)
+    if direction:
+        signals.append(
+            make_signal(
+                asset,
+                direction,
+                pattern,
+                sequence_color,
+                MA21_GREEN_BUY_WINDOW_SECONDS,
+                max_entries=2,
+                entry_second=33,
+            )
+        )
+
+    direction, pattern, sequence_color = detect_ma21_red_sell_at_33(asset)
     if direction:
         signals.append(
             make_signal(

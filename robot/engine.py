@@ -255,10 +255,10 @@ class RobotEngine:
     def update_pair_watch_asset(self, asset, now: float, threshold_seconds: int) -> dict:
         closed = [candle for candle in asset.candles if candle.closed and candle_color(candle) != "DOJI"]
         state = self.pair_watch_states.get(asset.name, {})
-        if len(closed) < 3:
+        if len(closed) < 2:
             state.update(
                 {
-                    "status": "Aguardando tendencia",
+                    "status": "Aguardando candles para medir pares",
                     "alert": False,
                     "elapsed_seconds": 0,
                     "last_colors": self._last_pair_watch_colors(closed),
@@ -271,98 +271,84 @@ class RobotEngine:
         last_color = candle_color(last)
         last_timestamp = int(last.timestamp)
 
-        if (
-            not state.get("watching")
-            and (state.get("respected") or state.get("alert"))
-            and last_timestamp == state.get("completed_timestamp")
-        ):
-            state["last_colors"] = self._last_pair_watch_colors(closed)
-            self.pair_watch_states[asset.name] = state
-            return state
-
-        if state.get("watching"):
-            state["elapsed_seconds"] = int(now - float(state.get("started_at", now)))
-            state["last_colors"] = self._last_pair_watch_colors(closed)
-            target_color = state.get("target_color")
-            if last_color == target_color and last_timestamp != state.get("first_candle_timestamp"):
-                state.update(
-                    {
-                        "watching": False,
-                        "respected": True,
-                        "alert": False,
-                        "completed_timestamp": last_timestamp,
-                        "status": f"Respeitou: 2 {self._pair_color_label(target_color)}",
-                    }
-                )
-            elif state["elapsed_seconds"] >= threshold_seconds and not state.get("trade_sent"):
-                direction = "CALL" if target_color == "GREEN" else "PUT"
-                state.update(
-                    {
-                        "watching": False,
-                        "respected": False,
-                        "alert": True,
-                        "trade_sent": True,
-                        "completed_timestamp": last_timestamp,
-                        "status": f"Nao respeitou: 1 {self._pair_color_label(target_color)}; entrada {direction}",
-                        "signal": Signal(
-                            asset=asset.name,
-                            active_id=asset.active_id,
-                            payout=asset.payout,
-                            pattern=f"Par de cores atrasado: apenas 1 {self._pair_color_label(target_color)} em {self.settings.pair_watch_minutes} minutos",
-                            direction=direction,
-                            sequence_color=target_color,
-                            timestamp=datetime.now(),
-                            strategy_window_seconds=60,
-                            max_entries=1,
-                        ),
-                    }
-                )
-            else:
-                remaining = max(0, threshold_seconds - int(state.get("elapsed_seconds", 0) or 0))
-                state["status"] = (
-                    f"Nasceu 1 {self._pair_color_label(target_color)} as {state.get('first_candle_time', '-')}; "
-                    f"aguardando 2 {self._pair_color_label(target_color)} ({remaining // 60:02d}:{remaining % 60:02d})"
-                )
-            self.pair_watch_states[asset.name] = state
-            return state
-
-        previous_color = candle_color(closed[-2])
-        previous_count = 0
-        for candle in reversed(closed[:-1]):
-            if candle_color(candle) != previous_color:
+        latest_pair_timestamp = None
+        latest_pair_color = None
+        for index in range(len(closed) - 1, 0, -1):
+            color = candle_color(closed[index])
+            if color == candle_color(closed[index - 1]):
+                latest_pair_timestamp = int(closed[index].timestamp)
+                latest_pair_color = color
                 break
-            previous_count += 1
 
-        if previous_count >= 2 and last_color != previous_color and last_timestamp != state.get("completed_timestamp"):
-            trend = "ALTA" if previous_color == "GREEN" else "BAIXA"
-            first_time = datetime.fromtimestamp(last_timestamp, BULLEX_TIMEZONE)
-            deadline_time = first_time + timedelta(seconds=threshold_seconds)
+        previous_pair_timestamp = state.get("last_pair_timestamp")
+        if latest_pair_timestamp and latest_pair_timestamp != previous_pair_timestamp:
+            pair_time = datetime.fromtimestamp(latest_pair_timestamp, BULLEX_TIMEZONE)
             state = {
-                "watching": True,
-                "respected": False,
+                "watching": False,
+                "respected": True,
                 "alert": False,
-                "trend": trend,
-                "target_color": last_color,
-                "first_candle_timestamp": last_timestamp,
-                "first_candle_time": first_time.strftime("%H:%M:%S"),
-                "deadline_time": deadline_time.strftime("%H:%M:%S"),
-                "started_at": now,
+                "trade_sent": False,
+                "trend": "ALTA" if latest_pair_color == "GREEN" else "BAIXA",
+                "target_color": latest_pair_color,
+                "first_candle_time": pair_time.strftime("%H:%M:%S"),
+                "deadline_time": (pair_time + timedelta(seconds=threshold_seconds)).strftime("%H:%M:%S"),
+                "last_pair_timestamp": latest_pair_timestamp,
                 "elapsed_seconds": 0,
-                "status": f"Nasceu 1 {self._pair_color_label(last_color)} as {first_time.strftime('%H:%M:%S')}; aguardando 2 ate {deadline_time.strftime('%H:%M:%S')}",
+                "status": f"Respeitou: 2 {self._pair_color_label(latest_pair_color)} as {pair_time.strftime('%H:%M:%S')}",
                 "last_colors": self._last_pair_watch_colors(closed),
-                "completed_timestamp": last_timestamp,
+                "completed_timestamp": latest_pair_timestamp,
             }
-        else:
+            self.pair_watch_states[asset.name] = state
+            return state
+
+        baseline_timestamp = int(previous_pair_timestamp or latest_pair_timestamp or closed[0].timestamp)
+        baseline_time = datetime.fromtimestamp(baseline_timestamp, BULLEX_TIMEZONE)
+        elapsed_seconds = max(0, last_timestamp - baseline_timestamp)
+        deadline_time = baseline_time + timedelta(seconds=threshold_seconds)
+
+        if elapsed_seconds >= threshold_seconds and last_timestamp != state.get("completed_timestamp") and not state.get("trade_sent"):
+            direction = "CALL" if last_color == "GREEN" else "PUT"
+            first_time = datetime.fromtimestamp(last_timestamp, BULLEX_TIMEZONE)
             state.update(
                 {
                     "watching": False,
+                    "respected": False,
+                    "alert": True,
+                    "trade_sent": True,
+                    "trend": "ALTA" if last_color == "GREEN" else "BAIXA",
+                    "target_color": last_color,
+                    "first_candle_time": first_time.strftime("%H:%M:%S"),
+                    "deadline_time": deadline_time.strftime("%H:%M:%S"),
+                    "last_pair_timestamp": baseline_timestamp,
+                    "elapsed_seconds": elapsed_seconds,
+                    "completed_timestamp": last_timestamp,
+                    "status": f"{self.settings.pair_watch_minutes}+ min sem 2 iguais; nasceu {self._pair_color_label(last_color)} as {first_time.strftime('%H:%M:%S')}; entrada {direction}",
+                    "last_colors": self._last_pair_watch_colors(closed),
+                    "signal": Signal(
+                        asset=asset.name,
+                        active_id=asset.active_id,
+                        payout=asset.payout,
+                        pattern=f"{self.settings.pair_watch_minutes}+ minutos sem 2 candles iguais; nasceu 1 {self._pair_color_label(last_color)}",
+                        direction=direction,
+                        sequence_color=last_color,
+                        timestamp=datetime.now(),
+                        strategy_window_seconds=60,
+                        max_entries=1,
+                    ),
+                }
+            )
+        else:
+            state.update(
+                {
+                    "watching": True,
                     "alert": False,
                     "trend": "ALTA" if last_color == "GREEN" else "BAIXA",
-                    "target_color": "-",
-                    "elapsed_seconds": 0,
-                    "first_candle_time": "-",
-                    "deadline_time": "-",
-                    "status": "Aguardando primeira cor contraria",
+                    "target_color": last_color,
+                    "elapsed_seconds": elapsed_seconds,
+                    "first_candle_time": baseline_time.strftime("%H:%M:%S"),
+                    "deadline_time": deadline_time.strftime("%H:%M:%S"),
+                    "last_pair_timestamp": baseline_timestamp,
+                    "status": f"Sem 2 iguais desde {baseline_time.strftime('%H:%M:%S')}; gatilho apos {deadline_time.strftime('%H:%M:%S')}",
                     "last_colors": self._last_pair_watch_colors(closed),
                 }
             )

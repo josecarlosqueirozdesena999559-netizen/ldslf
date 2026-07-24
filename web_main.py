@@ -196,7 +196,7 @@ class WebBot:
         self.auto_trade = True
         self.manual_paused = False
         self.active_strategy = "Estrategia 01"
-        self.next_strategy = "Monitorando todas as estrategias sem ordem fixa: 8 verdes + reversoes, padroes alternados, MA21/33s e pares 18min"
+        self.next_strategy = "Monitorando todas as estrategias sem ordem fixa: 8 verdes + reversoes, padroes alternados, MA21 compra/venda 33s e pares 18min"
         self.schedule_enabled = False
         self.schedule_start = ""
         self.schedule_stop = ""
@@ -287,7 +287,7 @@ class WebBot:
             self.manual_paused = False
             self.auto_trade = auto_trade
             self.active_strategy = "Estrategia 01"
-            self.next_strategy = "Monitorando todas as estrategias sem ordem fixa: 8 verdes + reversoes, padroes alternados, MA21/33s e pares 18min"
+            self.next_strategy = "Monitorando todas as estrategias sem ordem fixa: 8 verdes + reversoes, padroes alternados, MA21 compra/venda 33s e pares 18min"
             self.status = "Carregando ativos"
 
         try:
@@ -605,10 +605,10 @@ class WebBot:
     def update_pair_watch_asset(self, asset: Asset, now: float, threshold_seconds: int) -> dict:
         closed = [candle for candle in asset.candles if candle.closed and candle_color(candle) != "DOJI"]
         state = self.pair_watch_states.get(asset.name, {})
-        if len(closed) < 3:
+        if len(closed) < 2:
             state.update(
                 {
-                    "status": "Aguardando tendencia",
+                    "status": "Aguardando candles para medir pares",
                     "alert": False,
                     "elapsed_seconds": 0,
                     "last_colors": self.last_pair_watch_colors(closed),
@@ -621,100 +621,87 @@ class WebBot:
         last_color = candle_color(last)
         last_timestamp = int(last.timestamp)
 
-        if (
-            not state.get("watching")
-            and (state.get("respected") or state.get("alert"))
-            and last_timestamp == state.get("completed_timestamp")
-        ):
-            state["last_colors"] = self.last_pair_watch_colors(closed)
-            self.pair_watch_states[asset.name] = state
-            return state
-
-        if state.get("watching"):
-            state["elapsed_seconds"] = int(now - float(state.get("started_at", now)))
-            state["last_colors"] = self.last_pair_watch_colors(closed)
-            target_color = state.get("target_color")
-            if last_color == target_color and last_timestamp != state.get("first_candle_timestamp"):
-                state.update(
-                    {
-                        "watching": False,
-                        "respected": True,
-                        "alert": False,
-                        "completed_timestamp": last_timestamp,
-                        "status": f"Respeitou: 2 {self.pair_color_label(target_color)}",
-                    }
-                )
-                self.pair_watch_respected += 1
-            elif state["elapsed_seconds"] >= threshold_seconds and not state.get("trade_sent"):
-                direction = "CALL" if target_color == "GREEN" else "PUT"
-                state.update(
-                    {
-                        "watching": False,
-                        "respected": False,
-                        "alert": True,
-                        "trade_sent": True,
-                        "completed_timestamp": last_timestamp,
-                        "status": f"Nao respeitou: 1 {self.pair_color_label(target_color)}; entrada {direction}",
-                        "signal": Signal(
-                            asset=asset.name,
-                            active_id=asset.active_id,
-                            payout=asset.payout,
-                            pattern=f"Par de cores atrasado: apenas 1 {self.pair_color_label(target_color)} em {self.settings.pair_watch_minutes} minutos",
-                            direction=direction,
-                            sequence_color=target_color,
-                            timestamp=datetime.now(),
-                            strategy_window_seconds=60,
-                            max_entries=1,
-                        ),
-                    }
-                )
-                self.pair_watch_entries += 1
-            else:
-                remaining = max(0, threshold_seconds - int(state.get("elapsed_seconds", 0) or 0))
-                state["status"] = (
-                    f"Nasceu 1 {self.pair_color_label(target_color)} as {state.get('first_candle_time', '-')}; "
-                    f"aguardando 2 {self.pair_color_label(target_color)} ({remaining // 60:02d}:{remaining % 60:02d})"
-                )
-            self.pair_watch_states[asset.name] = state
-            return state
-
-        previous_color = candle_color(closed[-2])
-        previous_count = 0
-        for candle in reversed(closed[:-1]):
-            if candle_color(candle) != previous_color:
+        latest_pair_timestamp = None
+        latest_pair_color = None
+        for index in range(len(closed) - 1, 0, -1):
+            color = candle_color(closed[index])
+            if color == candle_color(closed[index - 1]):
+                latest_pair_timestamp = int(closed[index].timestamp)
+                latest_pair_color = color
                 break
-            previous_count += 1
 
-        if previous_count >= 2 and last_color != previous_color and last_timestamp != state.get("completed_timestamp"):
-            trend = "ALTA" if previous_color == "GREEN" else "BAIXA"
-            first_time = datetime.fromtimestamp(last_timestamp, BULLEX_TIMEZONE)
-            deadline_time = first_time + timedelta(seconds=threshold_seconds)
+        previous_pair_timestamp = state.get("last_pair_timestamp")
+        if latest_pair_timestamp and latest_pair_timestamp != previous_pair_timestamp:
+            pair_time = datetime.fromtimestamp(latest_pair_timestamp, BULLEX_TIMEZONE)
             state = {
-                "watching": True,
-                "respected": False,
+                "watching": False,
+                "respected": True,
                 "alert": False,
-                "trend": trend,
-                "target_color": last_color,
-                "first_candle_timestamp": last_timestamp,
-                "first_candle_time": first_time.strftime("%H:%M:%S"),
-                "deadline_time": deadline_time.strftime("%H:%M:%S"),
-                "started_at": now,
+                "trade_sent": False,
+                "trend": "ALTA" if latest_pair_color == "GREEN" else "BAIXA",
+                "target_color": latest_pair_color,
+                "first_candle_time": pair_time.strftime("%H:%M:%S"),
+                "deadline_time": (pair_time + timedelta(seconds=threshold_seconds)).strftime("%H:%M:%S"),
+                "last_pair_timestamp": latest_pair_timestamp,
                 "elapsed_seconds": 0,
-                "status": f"Nasceu 1 {self.pair_color_label(last_color)} as {first_time.strftime('%H:%M:%S')}; aguardando 2 ate {deadline_time.strftime('%H:%M:%S')}",
+                "status": f"Respeitou: 2 {self.pair_color_label(latest_pair_color)} as {pair_time.strftime('%H:%M:%S')}",
                 "last_colors": self.last_pair_watch_colors(closed),
-                "completed_timestamp": last_timestamp,
+                "completed_timestamp": latest_pair_timestamp,
             }
-        else:
+            if previous_pair_timestamp:
+                self.pair_watch_respected += 1
+            self.pair_watch_states[asset.name] = state
+            return state
+
+        baseline_timestamp = int(previous_pair_timestamp or latest_pair_timestamp or closed[0].timestamp)
+        baseline_time = datetime.fromtimestamp(baseline_timestamp, BULLEX_TIMEZONE)
+        elapsed_seconds = max(0, last_timestamp - baseline_timestamp)
+        deadline_time = baseline_time + timedelta(seconds=threshold_seconds)
+
+        if elapsed_seconds >= threshold_seconds and last_timestamp != state.get("completed_timestamp") and not state.get("trade_sent"):
+            direction = "CALL" if last_color == "GREEN" else "PUT"
+            first_time = datetime.fromtimestamp(last_timestamp, BULLEX_TIMEZONE)
             state.update(
                 {
                     "watching": False,
+                    "respected": False,
+                    "alert": True,
+                    "trade_sent": True,
+                    "trend": "ALTA" if last_color == "GREEN" else "BAIXA",
+                    "target_color": last_color,
+                    "first_candle_time": first_time.strftime("%H:%M:%S"),
+                    "deadline_time": deadline_time.strftime("%H:%M:%S"),
+                    "last_pair_timestamp": baseline_timestamp,
+                    "elapsed_seconds": elapsed_seconds,
+                    "completed_timestamp": last_timestamp,
+                    "status": f"{self.settings.pair_watch_minutes}+ min sem 2 iguais; nasceu {self.pair_color_label(last_color)} as {first_time.strftime('%H:%M:%S')}; entrada {direction}",
+                    "last_colors": self.last_pair_watch_colors(closed),
+                    "signal": Signal(
+                        asset=asset.name,
+                        active_id=asset.active_id,
+                        payout=asset.payout,
+                        pattern=f"{self.settings.pair_watch_minutes}+ minutos sem 2 candles iguais; nasceu 1 {self.pair_color_label(last_color)}",
+                        direction=direction,
+                        sequence_color=last_color,
+                        timestamp=datetime.now(),
+                        strategy_window_seconds=60,
+                        max_entries=1,
+                    ),
+                }
+            )
+            self.pair_watch_entries += 1
+        else:
+            state.update(
+                {
+                    "watching": True,
                     "alert": False,
                     "trend": "ALTA" if last_color == "GREEN" else "BAIXA",
-                    "target_color": "-",
-                    "elapsed_seconds": 0,
-                    "first_candle_time": "-",
-                    "deadline_time": "-",
-                    "status": "Aguardando primeira cor contraria",
+                    "target_color": last_color,
+                    "elapsed_seconds": elapsed_seconds,
+                    "first_candle_time": baseline_time.strftime("%H:%M:%S"),
+                    "deadline_time": deadline_time.strftime("%H:%M:%S"),
+                    "last_pair_timestamp": baseline_timestamp,
+                    "status": f"Sem 2 iguais desde {baseline_time.strftime('%H:%M:%S')}; gatilho apos {deadline_time.strftime('%H:%M:%S')}",
                     "last_colors": self.last_pair_watch_colors(closed),
                 }
             )
@@ -882,7 +869,7 @@ class WebBot:
             self.status = self.stop_reason
             self.running = False
             return
-        self.next_strategy = "Monitorando todas as estrategias sem ordem fixa: 8 verdes + reversoes, padroes alternados, MA21/33s e pares 18min"
+        self.next_strategy = "Monitorando todas as estrategias sem ordem fixa: 8 verdes + reversoes, padroes alternados, MA21 compra/venda 33s e pares 18min"
         self.active_strategy = "Estrategia 01"
         self.status = "Escaneando ativos em tempo real / aguardando sinal"
 
@@ -1451,7 +1438,7 @@ class WebBot:
         return {
             "asset": None,
             "title": "Escaneando estrategias sem ordem fixa",
-            "detail": "Estrategia 01, estrategia 03, estrategia 04, estrategia 05, MA21 contra, compra no segundo 33, rompimento MA21 aos 33s e pares 18min",
+            "detail": "Estrategia 01, estrategia 03, estrategia 04, estrategia 05, MA21 contra, compra/venda no segundo 33, rompimento MA21 aos 33s e pares 18min",
         }
 
     def state(self) -> dict:
@@ -1506,7 +1493,7 @@ class WebBot:
             "settings_saved": self.settings_saved,
             "account": self.last_account,
             "strategy": "Estrategia 01",
-            "strategy_detail": "Estrategias analisadas sem ordem fixa. 8 verdes seguidos + reversao com 2 vermelhos: entrada PUT contra a tendencia com entrada, G1 e G2. 8 verdes seguidos + 9o candle vermelho + mais 2 vermelhos: entrada CALL com G1 se der loss. Vermelho, verde, vermelho e verde: proxima entrada PUT; se der loss, G1 em CALL. Verde, vermelho, verde e vermelho: proxima entrada CALL; se der loss, G1 em PUT. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde rompe a MA21, termina acima depois de 33s, com apenas 1 ou 2 verdes antes, entrada + G1. CALL 33 MA21: candle verde rompe a MA21 para cima; candle seguinte fica negativo aos 33s e fecha verde positivo, CALL com entrada + G1. PUT 33 MA21: candle vermelho rompe a MA21 para baixo; candle seguinte fica verde aos 33s e fecha vermelho negativo, PUT com entrada + G1. Pares 18min: 1 verde atrasado CALL, 1 vermelho atrasado PUT.",
+            "strategy_detail": "Estrategias analisadas sem ordem fixa. 8 verdes seguidos + reversao com 2 vermelhos: entrada PUT contra a tendencia com entrada, G1 e G2. 8 verdes seguidos + 9o candle vermelho + mais 2 vermelhos: entrada CALL com G1 se der loss. Vermelho, verde, vermelho e verde: proxima entrada PUT; se der loss, G1 em CALL. Verde, vermelho, verde e vermelho: proxima entrada CALL; se der loss, G1 em PUT. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde rompe a MA21, termina acima depois de 33s, com apenas 1 ou 2 verdes antes, entrada + G1. Venda no 33: vermelho rompe a MA21 para baixo, termina abaixo depois de 33s, com apenas 1 ou 2 vermelhos antes, entrada PUT + G1. CALL 33 MA21: candle verde rompe a MA21 para cima; candle seguinte fica negativo aos 33s e fecha verde positivo, CALL com entrada + G1. PUT 33 MA21: candle vermelho rompe a MA21 para baixo; candle seguinte fica verde aos 33s e fecha vermelho negativo, PUT com entrada + G1. Pares 18min: 18+ minutos sem 2 candles iguais; nasceu verde CALL, nasceu vermelho PUT.",
             "strategy_moment": strategy_moment["title"],
             "strategy_moment_detail": strategy_moment["detail"],
             "target_sequence": self.active_strategy,
@@ -2145,7 +2132,7 @@ HTML = r"""
       $("pausePanel").classList.add("hidden");
       $("analysisPanel").classList.remove("hidden");
       $("asset").textContent = data.asset || "Aguardando ativo";
-      $("sequence").textContent = `EstratÃ©gia do momento: ${data.strategy || "Estrategia 01"} - 8 verdes + 2 vermelhos, estrategia 03, estrategia 04, estrategia 05, MA21, compra no 33 ou pares 18min`;
+      $("sequence").textContent = `EstratÃ©gia do momento: ${data.strategy || "Estrategia 01"} - 8 verdes + 2 vermelhos, estrategia 03, estrategia 04, estrategia 05, MA21, compra/venda no 33 ou pares 18min`;
       $("signal").textContent = data.signal ? `Sinal: ${data.signal.direction} (${data.signal.pattern})` : "Sinal: aguardando estrategia";
       const last = data.candles[data.candles.length - 1];
       if (last) {

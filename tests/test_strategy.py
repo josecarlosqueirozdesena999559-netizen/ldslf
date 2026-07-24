@@ -48,6 +48,17 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
         candles.append(Candle(open=1.0, close=1.3, high=1.31, low=0.98, timestamp=20, update_timestamp=update_timestamp))
         return Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
 
+    def make_ma21_red_break_asset(self, previous_red_count: int, update_timestamp: int = 34) -> Asset:
+        candles = [
+            Candle(open=1.0, close=1.0, high=1.01, low=0.99, timestamp=index)
+            for index in range(20 - previous_red_count)
+        ]
+        start = len(candles)
+        for index in range(start, 20):
+            candles.append(Candle(open=1.0, close=0.95, high=1.01, low=0.94, timestamp=index))
+        candles.append(Candle(open=1.0, close=0.7, high=1.02, low=0.69, timestamp=20, update_timestamp=update_timestamp))
+        return Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
+
     def test_eight_green_in_sequence_waits_reversal(self) -> None:
         self.assertIsNone(generate_signal(self.make_asset(["GREEN"] * 8)))
 
@@ -178,6 +189,32 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
 
     def test_green_above_ma21_strategy_requires_close_after_33_seconds(self) -> None:
         asset = self.make_ma21_break_asset(previous_green_count=1, update_timestamp=33)
+
+        self.assertIsNone(generate_signal(asset))
+
+    def test_red_below_ma21_after_33_signals_put_at_33(self) -> None:
+        asset = self.make_ma21_red_break_asset(previous_red_count=1)
+
+        signal = generate_signal(asset)
+
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal.direction, "PUT")
+        self.assertEqual(signal.max_entries, 2)
+        self.assertEqual(signal.entry_second, 33)
+        self.assertIn("Vermelho rompeu a MA21", signal.pattern)
+
+    def test_red_ma21_break_strategy_allows_two_previous_red_candles(self) -> None:
+        asset = self.make_ma21_red_break_asset(previous_red_count=2)
+
+        self.assertIsNotNone(generate_signal(asset))
+
+    def test_red_ma21_break_strategy_blocks_three_previous_red_candles(self) -> None:
+        asset = self.make_ma21_red_break_asset(previous_red_count=3)
+
+        self.assertIsNone(generate_signal(asset))
+
+    def test_red_below_ma21_strategy_requires_close_after_33_seconds(self) -> None:
+        asset = self.make_ma21_red_break_asset(previous_red_count=1, update_timestamp=33)
 
         self.assertIsNone(generate_signal(asset))
 

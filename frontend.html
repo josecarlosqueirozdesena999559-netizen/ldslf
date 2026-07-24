@@ -1854,7 +1854,7 @@
           <div class="sequences-header-row">
             <div>
               <h2 class="panel-title" style="margin-bottom: 5px;"><i class="fa-solid fa-layer-group"></i> Monitor Pares 18min</h2>
-              <p style="color: var(--text-muted); font-size: 13px;">Monitora a primeira vela contraria apos tendencia e executa quando o segundo par nao respeita o limite.</p>
+              <p style="color: var(--text-muted); font-size: 13px;">Conta o tempo sem nascer dois candles iguais; com 18min ou mais, a proxima vela gera entrada pela cor dela.</p>
             </div>
             <button onclick="refresh()" class="btn-refresh">
               <i class="fa-solid fa-rotate"></i> Atualizar Agora
@@ -1873,7 +1873,7 @@
               </div>
             </div>
             <div class="pair-watch-active">
-              <div>Marcado: <span id="pairWatchActiveAsset" class="val">-</span></div>
+              <div>Ativo: <span id="pairWatchActiveAsset" class="val">-</span></div>
               <div>Status: <span id="pairWatchActiveStatus" class="val">Aguardando</span></div>
             </div>
             <div class="table-container">
@@ -1883,9 +1883,9 @@
                     <th>Ativo</th>
                     <th>Payout</th>
                     <th>Tendencia</th>
-                    <th>Cor marcada</th>
-                    <th>Nasceu</th>
-                    <th>Limite</th>
+                    <th>Ultima cor</th>
+                    <th>Referencia</th>
+                    <th>Gatilho</th>
                     <th>Tempo</th>
                     <th>Status</th>
                     <th>Ultimas cores</th>
