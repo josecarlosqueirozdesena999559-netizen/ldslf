@@ -17,6 +17,10 @@ ENTRY_PREPARE_LEAD_SECONDS = 0.35
 ENTRY_POLL_SECONDS = 0.03
 
 
+def operation_now() -> datetime:
+    return datetime.now().astimezone()
+
+
 class TradeExecutor:
     def __init__(self, client: BullExClient, risk: RiskManager, history: HistoryStore, logger) -> None:
         self.client = client
@@ -129,7 +133,7 @@ class TradeExecutor:
             )
             self.risk.add_profit(profit)
             trade = TradeResult(
-                timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                timestamp=operation_now().strftime("%Y-%m-%d %H:%M:%S"),
                 asset=signal.asset,
                 direction=direction,
                 payout=signal.payout,
@@ -206,7 +210,7 @@ class TradeExecutor:
         )
         self.risk.add_profit(profit)
         trade = TradeResult(
-            timestamp=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            timestamp=operation_now().strftime("%Y-%m-%d %H:%M:%S"),
             asset=signal.asset,
             direction=signal.direction,
             payout=signal.payout,
@@ -247,14 +251,16 @@ class TradeExecutor:
         wait = max(0.0, duration_seconds - candle_second - ENTRY_PREPARE_LEAD_SECONDS)
         self.current_trade = f"Preparando entrada no proximo candle ({wait:.2f}s)"
         self.logger.info("[TRADE] preparando entrada para proximo candle: %.2fs", wait)
-        self.sleep_until(time.time() + wait)
+        self.sleep_until(time.time() + wait, "Preparando entrada no proximo candle")
         return True
 
-    def sleep_until(self, target: float) -> None:
+    def sleep_until(self, target: float, status_prefix: str | None = None) -> None:
         while True:
             remaining = target - time.time()
             if remaining <= 0:
                 return
+            if status_prefix:
+                self.current_trade = f"{status_prefix} ({remaining:.2f}s)"
             time.sleep(min(ENTRY_POLL_SECONDS, remaining))
 
     def wait_entry_second(self, signal: Signal) -> None:
@@ -264,8 +270,10 @@ class TradeExecutor:
         current_second = int(time.time()) % 60
         wait = (int(entry_second) - current_second) % 60
         if wait > 0:
-            self.current_trade = f"Aguardando segundo {entry_second} para entrada"
-            time.sleep(wait)
+            self.sleep_until(
+                time.time() + wait,
+                f"Aguardando segundo {entry_second} para entrada",
+            )
 
     def resolve_robot_order_result(
         self,

@@ -36,6 +36,20 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
             candles=[candle(color, index) for index, color in enumerate(colors)],
         )
 
+    def test_eight_green_in_sequence_signals_put_on_next_candle(self) -> None:
+        signal = generate_signal(self.make_asset(["GREEN"] * 8))
+
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal.direction, "PUT")
+        self.assertIn("8 candles seguidos", signal.pattern)
+
+    def test_eight_red_in_sequence_signals_call_on_next_candle(self) -> None:
+        signal = generate_signal(self.make_asset(["RED"] * 8))
+
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal.direction, "CALL")
+        self.assertIn("8 candles seguidos", signal.pattern)
+
     def test_eight_red_then_two_green_signals_put(self) -> None:
         signal = generate_signal(self.make_asset(["RED"] * 8 + ["GREEN"] * 2))
 

@@ -6,7 +6,7 @@ import json
 import queue
 import uuid
 from dataclasses import replace
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -43,7 +43,7 @@ BOT_LOOP_IDLE_SECONDS = 0.20
 
 
 def bullex_now() -> datetime:
-    return datetime.now(timezone.utc) - timedelta(hours=3)
+    return datetime.now().astimezone()
 
 
 class LoginPayload(BaseModel):
@@ -559,7 +559,7 @@ class WebBot:
             cycle_trades = self.executor.last_cycle_trades if self.executor else []
             if trade and trade.result == "WIN":
                 self.add_session_cycle(cycle_trades or [trade], pattern=signal.pattern)
-                self.last_green_time = time.strftime("%H:%M:%S")
+                self.last_green_time = bullex_now().strftime("%H:%M:%S")
                 self.save_session_score()
                 self.finish_cycle_after_trade()
             elif trade:
@@ -852,7 +852,7 @@ class WebBot:
             "value": value,
             "market": market,
             "status": "AGUARDANDO",
-            "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "created_at": bullex_now().strftime("%Y-%m-%d %H:%M:%S"),
             "last_executed_date": "",
             "message": "",
         }
@@ -874,7 +874,7 @@ class WebBot:
     def process_manual_entries(self) -> None:
         if not self.client or not self.executor or self.operation_open:
             return
-        now = datetime.now()
+        now = bullex_now()
         now_time = now.strftime("%H:%M:%S")
         today = now.strftime("%Y-%m-%d")
         due_entries = [
@@ -918,10 +918,10 @@ class WebBot:
                 self.add_session_cycle(cycle_trades or [trade], pattern="Entrada Manual")
                 win_trade = next((item for item in cycle_trades if item.result == "WIN"), None)
                 if win_trade or trade.result == "WIN":
-                    self.last_green_time = time.strftime("%H:%M:%S")
+                    self.last_green_time = bullex_now().strftime("%H:%M:%S")
                     self.save_session_score()
                 entry["status"] = "WIN" if win_trade else trade.result
-                entry["last_executed_date"] = datetime.now().strftime("%Y-%m-%d")
+                entry["last_executed_date"] = bullex_now().strftime("%Y-%m-%d")
                 entry["message"] = f"Resultado automático: {'WIN' if win_trade else trade.result} lucro {sum(float(item.profit or 0) for item in cycle_trades or [trade]):.2f}"
             else:
                 entry["status"] = "FALHOU"
@@ -950,7 +950,7 @@ class WebBot:
             if not entry:
                 return False
             entry["status"] = "WIN"
-            entry["last_executed_date"] = datetime.now().strftime("%Y-%m-%d")
+            entry["last_executed_date"] = bullex_now().strftime("%Y-%m-%d")
             entry["message"] = "WIN marcado manualmente"
             self.save_manual_entries()
             return True

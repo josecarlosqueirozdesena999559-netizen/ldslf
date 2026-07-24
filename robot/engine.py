@@ -58,6 +58,7 @@ class RobotEngine:
         self.last_payout_update = 0.0
         self.last_asset_update: dict[str, float] = {}
         self.last_candle_log: dict[str, float] = {}
+        self.pair_watch_states: dict[str, dict] = {}
 
     def start(self) -> None:
         self.state.running = True
@@ -87,14 +88,21 @@ class RobotEngine:
     def monitor_assets(self) -> None:
         with Live(self.update_live_panels(), console=self.ui.console, refresh_per_second=2, screen=True) as live:
             while self.state.running:
-                if self.auto_trade and not self.operation_open:
+                if self.display_mode == "pair_watch":
+                    self.update_candles()
+                    signal = self.update_pair_watch_and_find_signal()
+                elif self.auto_trade and not self.operation_open:
                     signal = self.update_market_and_find_signal()
+                    if not signal:
+                        signal = self.update_pair_watch_and_find_signal()
                 else:
                     self.update_candles()
                     self.update_focus_asset()
                     signal = self.find_best_signal(mark_used=False)
                 self.state.last_signal = signal
-                if self.auto_trade and not self.operation_open:
+                if signal and not self.operation_open and self.is_pair_watch_signal(signal):
+                    self.start_pair_watch_trade(signal)
+                elif self.auto_trade and not self.operation_open and self.display_mode != "pair_watch":
                     self.handle_auto_trade(signal)
                 live.update(self.update_live_panels())
                 time.sleep(MONITOR_POLL_SECONDS)
@@ -219,6 +227,152 @@ class RobotEngine:
         self.logger.info("[SIGNAL] %s %s encontrado", best.asset, best.direction)
         return best
 
+    def update_pair_watch_and_find_signal(self) -> Signal | None:
+        self.state.status = (
+            f"Monitorando pares de cores: limite {self.settings.pair_watch_minutes} minutos"
+        )
+        threshold_seconds = self.settings.pair_watch_minutes * 60
+        now = time.time()
+        signal_to_trade: Signal | None = None
+
+        for asset in self.state.assets:
+            if not asset.open or asset.payout < self.settings.payout_min:
+                self.pair_watch_states[asset.name] = {
+                    "status": "Ativo fechado ou payout baixo",
+                    "alert": False,
+                }
+                continue
+
+            state = self.update_pair_watch_asset(asset, now, threshold_seconds)
+            if state.get("signal") and signal_to_trade is None:
+                signal_to_trade = state["signal"]
+                state["signal"] = None
+
+        self.update_pair_watch_focus()
+        return signal_to_trade
+
+    def update_pair_watch_asset(self, asset, now: float, threshold_seconds: int) -> dict:
+        closed = [candle for candle in asset.candles if candle.closed and candle_color(candle) != "DOJI"]
+        state = self.pair_watch_states.get(asset.name, {})
+        if len(closed) < 3:
+            state.update(
+                {
+                    "status": "Aguardando tendencia",
+                    "alert": False,
+                    "elapsed_seconds": 0,
+                    "last_colors": self._last_pair_watch_colors(closed),
+                }
+            )
+            self.pair_watch_states[asset.name] = state
+            return state
+
+        last = closed[-1]
+        last_color = candle_color(last)
+        last_timestamp = int(last.timestamp)
+
+        if (
+            not state.get("watching")
+            and (state.get("respected") or state.get("alert"))
+            and last_timestamp == state.get("completed_timestamp")
+        ):
+            state["last_colors"] = self._last_pair_watch_colors(closed)
+            self.pair_watch_states[asset.name] = state
+            return state
+
+        if state.get("watching"):
+            state["elapsed_seconds"] = int(now - float(state.get("started_at", now)))
+            state["last_colors"] = self._last_pair_watch_colors(closed)
+            target_color = state.get("target_color")
+            if last_color == target_color and last_timestamp != state.get("first_candle_timestamp"):
+                state.update(
+                    {
+                        "watching": False,
+                        "respected": True,
+                        "alert": False,
+                        "completed_timestamp": last_timestamp,
+                        "status": f"Respeitou: 2 {self._pair_color_label(target_color)}",
+                    }
+                )
+            elif state["elapsed_seconds"] >= threshold_seconds and not state.get("trade_sent"):
+                direction = "CALL" if target_color == "GREEN" else "PUT"
+                state.update(
+                    {
+                        "watching": False,
+                        "respected": False,
+                        "alert": True,
+                        "trade_sent": True,
+                        "completed_timestamp": last_timestamp,
+                        "status": f"Nao respeitou: 1 {self._pair_color_label(target_color)}; entrada {direction}",
+                        "signal": Signal(
+                            asset=asset.name,
+                            active_id=asset.active_id,
+                            payout=asset.payout,
+                            pattern=f"Par de cores atrasado: apenas 1 {self._pair_color_label(target_color)} em {self.settings.pair_watch_minutes} minutos",
+                            direction=direction,
+                            sequence_color=target_color,
+                            timestamp=datetime.now(),
+                            strategy_window_seconds=60,
+                            max_entries=1,
+                        ),
+                    }
+                )
+            else:
+                state["status"] = (
+                    f"Marcado: 1 {self._pair_color_label(target_color)}; aguardando 2 "
+                    f"{self._pair_color_label(target_color)}"
+                )
+            self.pair_watch_states[asset.name] = state
+            return state
+
+        previous_color = candle_color(closed[-2])
+        previous_count = 0
+        for candle in reversed(closed[:-1]):
+            if candle_color(candle) != previous_color:
+                break
+            previous_count += 1
+
+        if previous_count >= 2 and last_color != previous_color and last_timestamp != state.get("completed_timestamp"):
+            trend = "ALTA" if previous_color == "GREEN" else "BAIXA"
+            state = {
+                "watching": True,
+                "respected": False,
+                "alert": False,
+                "trend": trend,
+                "target_color": last_color,
+                "first_candle_timestamp": last_timestamp,
+                "started_at": now,
+                "elapsed_seconds": 0,
+                "status": f"Marcado: 1 {self._pair_color_label(last_color)}; aguardando 2 {self._pair_color_label(last_color)}",
+                "last_colors": self._last_pair_watch_colors(closed),
+                "completed_timestamp": last_timestamp,
+            }
+        else:
+            state.update(
+                {
+                    "watching": False,
+                    "alert": False,
+                    "trend": "ALTA" if last_color == "GREEN" else "BAIXA",
+                    "target_color": "-",
+                    "elapsed_seconds": 0,
+                    "status": "Aguardando primeira cor contraria",
+                    "last_colors": self._last_pair_watch_colors(closed),
+                }
+            )
+        self.pair_watch_states[asset.name] = state
+        return state
+
+    def update_pair_watch_focus(self) -> None:
+        alert_assets = [
+            asset for asset in self.state.assets if self.pair_watch_states.get(asset.name, {}).get("alert")
+        ]
+        if alert_assets:
+            self.state.focused_asset = alert_assets[0].name
+            return
+        watching_assets = [
+            asset for asset in self.state.assets if self.pair_watch_states.get(asset.name, {}).get("watching")
+        ]
+        self.state.focused_asset = watching_assets[0].name if watching_assets else None
+
     def update_focus_asset(self) -> None:
         if self.operation_open:
             return
@@ -270,6 +424,26 @@ class RobotEngine:
         self.trade_thread = threading.Thread(target=self.execute_cycle, args=(signal,), daemon=True)
         self.trade_thread.start()
 
+    def start_pair_watch_trade(self, signal: Signal) -> None:
+        with self.operation_lock:
+            if self.operation_open:
+                return
+            self.state.focused_asset = signal.asset
+            self.operation_open = True
+        self.state.status = f"Operando par atrasado: {signal.pattern}"
+        self.trade_thread = threading.Thread(target=self.execute_pair_watch_trade, args=(signal,), daemon=True)
+        self.trade_thread.start()
+
+    def execute_pair_watch_trade(self, signal: Signal) -> None:
+        try:
+            self.executor.execute_single(signal, self.settings, self.account_mode, "PAR ATRASADO")
+            self.state.status = (
+                f"Monitorando pares de cores: limite {self.settings.pair_watch_minutes} minutos"
+            )
+        finally:
+            with self.operation_lock:
+                self.operation_open = False
+
     def execute_cycle(self, signal: Signal) -> None:
         try:
             trade = self.executor.execute_cycle(signal, self.settings, self.account_mode)
@@ -286,6 +460,10 @@ class RobotEngine:
         return False
 
     @staticmethod
+    def is_pair_watch_signal(signal: Signal) -> bool:
+        return (signal.pattern or "").lower().startswith("par de cores atrasado")
+
+    @staticmethod
     def signal_key(asset, signal: Signal) -> tuple:
         closed = [candle for candle in asset.candles if candle.closed]
         last_timestamp = int(closed[-1].timestamp) if closed else 0
@@ -293,6 +471,15 @@ class RobotEngine:
 
     def update_live_panels(self):
         account = account_snapshot(self.client)
+        if self.display_mode == "pair_watch":
+            return self.ui.render_pair_watch_monitor(
+                account=account,
+                assets=self.state.assets,
+                states=self.pair_watch_states,
+                settings=self.settings,
+                current_trade=self.executor.current_trade,
+                status=self.state.status,
+            )
         if self.display_mode == "individual":
             return self.ui.render_individual_monitor(
                 account=account,
@@ -323,3 +510,15 @@ class RobotEngine:
         if hours:
             return f"{hours:02d}:{minutes:02d}:{secs:02d}"
         return f"{minutes:02d}:{secs:02d}"
+
+    @staticmethod
+    def _last_pair_watch_colors(candles) -> str:
+        return " ".join(candle_color(candle) for candle in candles[-8:]) or "-"
+
+    @staticmethod
+    def _pair_color_label(color: str | None) -> str:
+        if color == "GREEN":
+            return "verde"
+        if color == "RED":
+            return "vermelho"
+        return "-"

@@ -90,6 +90,61 @@ class TerminalUI:
         layout["candles"].update(self.render_candles_table(asset))
         return layout
 
+    def render_pair_watch_monitor(
+        self,
+        account: dict,
+        assets: list[Asset],
+        states: dict[str, dict],
+        settings: BotSettings,
+        current_trade: str,
+        status: str,
+    ) -> Layout:
+        layout = Layout()
+        layout.split_column(
+            Layout(name="top", size=9),
+            Layout(name="table", ratio=1),
+            Layout(name="bottom", size=6),
+        )
+        layout["top"].split_row(
+            Layout(self.render_account_panel(account), name="account"),
+            Layout(
+                Panel(
+                    f"Status: [bold]{status}[/bold]\n"
+                    f"Limite: [bold]{settings.pair_watch_minutes} minutos[/bold]\n"
+                    "Regra: 1 verde = CALL se atrasar; 1 vermelho = PUT se atrasar; 2 iguais = respeitou",
+                    title="Monitor de pares",
+                    border_style="yellow",
+                ),
+                name="summary",
+            ),
+        )
+        layout["table"].update(self.render_pair_watch_table(assets, states, settings))
+        layout["bottom"].update(self.render_trade_panel(current_trade))
+        return layout
+
+    def render_pair_watch_table(self, assets: list[Asset], states: dict[str, dict], settings: BotSettings) -> Panel:
+        table = Table(box=box.SIMPLE_HEAVY, expand=True)
+        for column in ("Ativo", "Payout", "Ultimas cores", "Tendencia", "Marcado", "Tempo", "Status"):
+            table.add_column(column, no_wrap=False)
+
+        for asset in assets:
+            state = states.get(asset.name, {})
+            target = state.get("target_color") or "-"
+            elapsed = self._format_seconds(int(state.get("elapsed_seconds", 0)))
+            status = state.get("status", "Aguardando")
+            style = "bold red" if state.get("alert") else "green" if state.get("respected") else None
+            table.add_row(
+                asset.name,
+                f"{asset.payout}%",
+                self._format_pair_watch_colors(state.get("last_colors", "-")),
+                state.get("trend", "-"),
+                self._format_pair_watch_color(target),
+                elapsed,
+                status,
+                style=style,
+            )
+        return Panel(table, title="Pares de cores monitorados", border_style="cyan")
+
     def render_pause_monitor(
         self,
         account: dict,
@@ -404,4 +459,35 @@ class TerminalUI:
         for value in values:
             index = int((value - low) / span * (len(ticks) - 1))
             text.append(ticks[index], style="cyan")
+        return text
+
+    @staticmethod
+    def _format_seconds(seconds: int) -> str:
+        minutes, secs = divmod(max(0, seconds), 60)
+        hours, minutes = divmod(minutes, 60)
+        if hours:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        return f"{minutes:02d}:{secs:02d}"
+
+    @staticmethod
+    def _format_pair_watch_color(color: str) -> str:
+        if color == "GREEN":
+            return "[bold white on green] VERDE [/bold white on green]"
+        if color == "RED":
+            return "[bold white on red] VERMELHO [/bold white on red]"
+        return "-"
+
+    @classmethod
+    def _format_pair_watch_colors(cls, colors: str) -> Text:
+        text = Text()
+        for color in str(colors or "-").split():
+            if color == "GREEN":
+                text.append(" G ", style="bold white on green")
+            elif color == "RED":
+                text.append(" R ", style="bold white on red")
+            elif color == "DOJI":
+                text.append(" D ", style="bold black on white")
+            else:
+                text.append("-")
+            text.append(" ")
         return text

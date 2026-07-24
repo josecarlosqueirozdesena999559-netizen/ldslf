@@ -15,6 +15,7 @@ MA21_WICKLESS_WINDOW_SECONDS = 600
 MA21_GREEN_BUY_WINDOW_SECONDS = 300
 NEGATIVE_33_GREEN_CLOSE_WINDOW_SECONDS = 300
 STRATEGY_PATTERN_MARKERS = (
+    "8 candles seguidos",
     "operar contra nas velas 3, 4 e 5",
     "operar contra nas velas 4, 5 e 6",
     "operar contra tendencia nas velas 5, 6 e 7",
@@ -302,6 +303,31 @@ def detect_eight_candle_reversal(asset: Asset) -> tuple[str | None, str, str | N
     return direction, pattern, reversal_color
 
 
+def detect_eight_candle_sequence(asset: Asset) -> tuple[str | None, str, str | None]:
+    closed = [candle for candle in asset.candles if candle.closed]
+    if len(closed) < TREND_SEQUENCE_MIN:
+        return None, f"Aguardando {TREND_SEQUENCE_MIN} candles", None
+
+    colors = [candle_color(candle) for candle in closed]
+    if colors[-1] == "DOJI":
+        return None, "Aguardando candle sem DOJI", "DOJI"
+
+    sequence_color = colors[-1]
+    sequence_count = 0
+    for color in reversed(colors):
+        if color != sequence_color:
+            break
+        sequence_count += 1
+
+    if sequence_count != TREND_SEQUENCE_MIN:
+        return None, "Aguardando fechar exatamente 8 candles seguidos", sequence_color
+
+    direction = "PUT" if sequence_color == "GREEN" else "CALL"
+    sequence_label = "verdes" if sequence_color == "GREEN" else "vermelhos"
+    pattern = f"8 candles seguidos {sequence_label}; operar contra na proxima vela"
+    return direction, pattern, sequence_color
+
+
 def detect_eight_candle_continuation(asset: Asset) -> tuple[str | None, str, str | None]:
     closed = [candle for candle in asset.candles if candle.closed]
     target_count = TREND_SEQUENCE_MIN + CONTINUATION_CONFIRMATION_CANDLES
@@ -447,6 +473,10 @@ def detect_ma21_red_break_positive_33_red_close_put(asset: Asset) -> tuple[str |
 
 def collect_strategy_signals(asset: Asset) -> list[Signal]:
     signals: list[Signal] = []
+
+    direction, pattern, sequence_color = detect_eight_candle_sequence(asset)
+    if direction:
+        signals.append(make_signal(asset, direction, pattern, sequence_color, REVERSAL_WINDOW_SECONDS))
 
     direction, pattern, sequence_color = detect_eight_candle_reversal(asset)
     if direction:

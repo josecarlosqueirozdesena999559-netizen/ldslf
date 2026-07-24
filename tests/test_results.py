@@ -61,7 +61,7 @@ class ResultAccountingTests(unittest.TestCase):
             allowed = executor.ensure_candle_open_entry(BotSettings(timeframe="M1"))
 
         self.assertTrue(allowed)
-        sleep_until.assert_called_once_with(119.65)
+        sleep_until.assert_called_once_with(119.65, "Preparando entrada no proximo candle")
         self.assertIn("Preparando entrada no proximo candle", executor.current_trade)
 
     def test_entry_inside_open_grace_is_allowed(self) -> None:

@@ -33,14 +33,15 @@ class BotMenu:
             self.ui.console.print(
                 "\n[bold]1[/bold] - Login BullEx\n"
                 "[bold]2[/bold] - Selecionar tipo de conta DEMO/REAL\n"
-                "[bold]3[/bold] - Configurar robô\n"
-                "[bold]4[/bold] - Monitorar e operar automaticamente em DEMO\n"
+                "[bold]3[/bold] - Configurar robo\n"
+                "[bold]4[/bold] - Monitorar e operar automaticamente na conta selecionada\n"
                 "[bold]5[/bold] - Monitorar candles em tempo real sem operar\n"
-                "[bold]6[/bold] - Parar robô\n"
-                "[bold]7[/bold] - Ver histórico\n"
-                "[bold]8[/bold] - Sair\n"
+                "[bold]6[/bold] - Monitorar e operar pares de cores atrasados 18 minutos\n"
+                "[bold]7[/bold] - Parar robo\n"
+                "[bold]8[/bold] - Ver historico\n"
+                "[bold]9[/bold] - Sair\n"
             )
-            option = Prompt.ask("Escolha", choices=["1", "2", "3", "4", "5", "6", "7", "8"])
+            option = Prompt.ask("Escolha", choices=["1", "2", "3", "4", "5", "6", "7", "8", "9"])
             if option == "1":
                 self.login()
             elif option == "2":
@@ -52,10 +53,12 @@ class BotMenu:
             elif option == "5":
                 self.start_robot(auto_trade=False, display_mode="individual")
             elif option == "6":
-                self.stop_robot()
+                self.start_robot(auto_trade=True, display_mode="pair_watch")
             elif option == "7":
-                self.show_history()
+                self.stop_robot()
             elif option == "8":
+                self.show_history()
+            elif option == "9":
                 self.stop_robot()
                 break
 
@@ -64,9 +67,9 @@ class BotMenu:
         password = getpass("Senha BullEx: ")
         self.select_account()
         if self.account_mode == "REAL":
-            text = Prompt.ask("Digite CONFIRMO REAL para liberar operações em REAL", default="")
+            text = Prompt.ask("Digite CONFIRMO REAL para liberar operacoes em REAL", default="")
             if not self.risk.confirm_real(text):
-                self.ui.console.print("[yellow]A conta REAL será conectada, mas as operações ficarão bloqueadas.[/yellow]")
+                self.ui.console.print("[yellow]A conta REAL sera conectada, mas as operacoes ficarao bloqueadas.[/yellow]")
 
         self.client = BullExClient()
         ok, error = self.client.connect(email, password, self.account_mode)
@@ -87,20 +90,27 @@ class BotMenu:
 
     def configure(self) -> None:
         self.settings.entry_value = FloatPrompt.ask("Valor da entrada inicial", default=self.settings.entry_value)
-        self.settings.stop_win = FloatPrompt.ask("Stop win diário", default=self.settings.stop_win)
-        self.settings.stop_loss = FloatPrompt.ask("Stop loss diário", default=self.settings.stop_loss)
+        self.settings.stop_win = FloatPrompt.ask("Stop win diario", default=self.settings.stop_win)
+        self.settings.stop_loss = FloatPrompt.ask("Stop loss diario", default=self.settings.stop_loss)
         self.settings.timeframe = Prompt.ask("Timeframe", choices=list(TIMEFRAMES), default=DEFAULT_TIMEFRAME)
-        self.settings.payout_min = IntPrompt.ask("Payout mínimo", default=DEFAULT_PAYOUT)
+        self.settings.payout_min = IntPrompt.ask("Payout minimo", default=DEFAULT_PAYOUT)
         self.settings.martingale_enabled = Confirm.ask("Martingale ativo?", default=True)
         self.settings.max_martingale = 2
         self.settings.martingale_multiplier = 2.0
         self.settings.asset_limit = max(1, IntPrompt.ask("Quantidade de ativos no monitor", default=self.settings.asset_limit))
-        self.ui.console.print("[green]Configuração salva.[/green]")
+        self.settings.pair_watch_minutes = max(
+            1,
+            IntPrompt.ask(
+                "Minutos para alertar pares seguidos atrasados",
+                default=self.settings.pair_watch_minutes,
+            ),
+        )
+        self.ui.console.print("[green]Configuracao salva.[/green]")
         Prompt.ask("Pressione ENTER para continuar", default="")
 
     def start_robot(self, auto_trade: bool, display_mode: str = "dashboard") -> None:
         if not self.client or not self.client.connected:
-            self.ui.console.print("[red]Faça login primeiro.[/red]")
+            self.ui.console.print("[red]Faca login primeiro.[/red]")
             Prompt.ask("Pressione ENTER para continuar", default="")
             return
         self.engine = RobotEngine(
@@ -122,7 +132,7 @@ class BotMenu:
     def stop_robot(self) -> None:
         if self.engine:
             self.engine.stop()
-            self.logger.info("[RISK] robô parado manualmente")
+            self.logger.info("[RISK] robo parado manualmente")
 
     def show_history(self) -> None:
         summary = self.history.summary()
