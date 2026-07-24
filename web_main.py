@@ -17,7 +17,7 @@ from bullex.account import account_snapshot
 from bullex.client import BullExClient
 from config import ASSET_PRIORITY
 from models.asset import Asset
-from models.candle import Candle
+from models.candle import BULLEX_TIMEZONE, Candle
 from models.settings import BotSettings
 from models.trade import Signal, TradeResult
 from robot.executor import TradeExecutor
@@ -43,7 +43,7 @@ BOT_LOOP_IDLE_SECONDS = 0.20
 
 
 def bullex_now() -> datetime:
-    return datetime.now().astimezone()
+    return datetime.now(BULLEX_TIMEZONE)
 
 
 class LoginPayload(BaseModel):
@@ -221,6 +221,9 @@ class WebBot:
         self.analysis_lock = threading.Lock()
         self.sequence_cache: dict[str, tuple[float, dict]] = {}
         self.monitored_sequence_cache: tuple[str, tuple[str, ...], dict] | None = None
+        self.pair_watch_states: dict[str, dict] = {}
+        self.pair_watch_respected = 0
+        self.pair_watch_entries = 0
         self.load_saved_settings()
         self.load_manual_entries()
         self.load_session_score()
@@ -344,6 +347,7 @@ class WebBot:
             self.used_signal_keys = set()
             self.negative_at_33_marks = set()
             self.positive_at_33_marks = set()
+            self.pair_watch_states = {}
             self.status = "Aguardando login"
             self.last_account = {"connected": False, "mode": "DEMO", "currency": "", "balance": 0.0}
             self.settings_saved = False
@@ -387,6 +391,8 @@ class WebBot:
 
             if self.auto_trade and not self.operation_open:
                 signal = self.update_market_and_find_signal()
+                if not signal:
+                    signal = self.update_pair_watch_and_find_signal()
             elif self.operation_open:
                 self.update_candles()
                 self.update_focus_asset()
@@ -400,7 +406,10 @@ class WebBot:
                     self.last_signal = signal
                     self.status = "Escaneando ativos em tempo real / aguardando sinal"
             if signal and self.auto_trade and not self.operation_open:
-                self.start_trade(signal)
+                if self.is_pair_watch_signal(signal):
+                    self.start_pair_watch_trade(signal)
+                else:
+                    self.start_trade(signal)
             self.refresh_account_if_due()
             time.sleep(BOT_LOOP_IDLE_SECONDS)
 
@@ -425,9 +434,9 @@ class WebBot:
         update_payout = time.time() - self.last_payout_update >= 30
         if update_payout:
             self.last_payout_update = time.time()
+        signals: list[tuple[Signal, tuple]] = []
         for asset in self.ordered_assets():
             self.update_asset_candles(asset, update_payout)
-            self.update_focus_asset()
             if not asset.open or asset.payout < self.settings.payout_min:
                 asset.signal = "-"
                 continue
@@ -437,8 +446,13 @@ class WebBot:
             key = self.signal_key(asset, signal)
             if key in self.used_signal_keys:
                 continue
-            return signal
-        return None
+            signals.append((signal, key))
+        if not signals:
+            self.update_focus_asset()
+            return None
+        signal, _key = max(signals, key=lambda item: (self.strategy_priority(item[0]), item[0].payout))
+        self.focused_asset = signal.asset
+        return signal
 
     def update_asset_candles(self, asset: Asset, update_payout: bool) -> None:
         try:
@@ -487,16 +501,7 @@ class WebBot:
         if not ready:
             self.focused_asset = None
             return
-        best = max(
-            ready,
-            key=lambda asset: (
-                self.asset_recency_score(asset),
-                self.visual_sequence_count(asset),
-                1 if asset.open else 0,
-                asset.payout,
-                asset.name,
-            ),
-        )
+        best = max(ready, key=self.asset_radar_score)
         self.focused_asset = best.name
 
     @staticmethod
@@ -506,6 +511,53 @@ class WebBot:
             return 0
         updated_at = int(current.update_timestamp or current.timestamp)
         return max(0, 120 - (int(time.time()) - updated_at))
+
+    def asset_radar_score(self, asset: Asset) -> tuple[int, int, int, str]:
+        if not asset.open or asset.payout < self.settings.payout_min:
+            return (0, 0, 0, asset.name)
+
+        state = self.pair_watch_states.get(asset.name, {})
+        if state.get("alert"):
+            return (150, asset.payout, self.asset_recency_score(asset), asset.name)
+        if state.get("watching"):
+            remaining = max(0, self.settings.pair_watch_minutes * 60 - int(state.get("elapsed_seconds", 0) or 0))
+            return (120 + max(0, 30 - remaining // 60), asset.payout, self.asset_recency_score(asset), asset.name)
+
+        signal = generate_signal(asset)
+        if signal:
+            return (100 + self.strategy_priority(signal), asset.payout, self.asset_recency_score(asset), asset.name)
+
+        text = f"{asset.sequence} {asset.signal}".lower()
+        sequence_count = self.visual_sequence_count(asset)
+        score = sequence_count
+        if "reversao 1/2" in text:
+            score = max(score, 85)
+        elif "ma21" in text:
+            score = max(score, 70)
+        elif "perto dos 8" in text:
+            score = max(score, 60 + sequence_count)
+        elif sequence_count >= 2:
+            score = max(score, sequence_count * 6)
+        return (score, asset.payout, self.asset_recency_score(asset), asset.name)
+
+    @staticmethod
+    def strategy_priority(signal: Signal) -> int:
+        pattern = (signal.pattern or "").lower()
+        if "par de cores atrasado" in pattern:
+            return 95
+        if "rompeu a ma21" in pattern:
+            return 90
+        if "comprar no segundo 33" in pattern:
+            return 85
+        if "velas 5, 6 e 7" in pattern:
+            return 80
+        if "velas 4, 5 e 6" in pattern:
+            return 75
+        if "velas 3, 4 e 5" in pattern:
+            return 70
+        if "8 candles seguidos" in pattern:
+            return 65
+        return 50
 
     def find_best_signal(self) -> Signal | None:
         return self.find_signal_for_sequences(mark_used=False)
@@ -527,6 +579,137 @@ class WebBot:
             self.used_signal_keys.add(key)
         return signal
 
+    def update_pair_watch_and_find_signal(self) -> Signal | None:
+        threshold_seconds = self.settings.pair_watch_minutes * 60
+        now = time.time()
+        signal_to_trade: Signal | None = None
+        for asset in self.ordered_assets():
+            if not asset.open or asset.payout < self.settings.payout_min:
+                self.pair_watch_states[asset.name] = {
+                    "status": "Ativo fechado ou payout baixo",
+                    "alert": False,
+                    "last_colors": "-",
+                }
+                continue
+            state = self.update_pair_watch_asset(asset, now, threshold_seconds)
+            if state.get("signal") and signal_to_trade is None:
+                signal_to_trade = state["signal"]
+                state["signal"] = None
+                self.focused_asset = signal_to_trade.asset
+        return signal_to_trade
+
+    def update_pair_watch_asset(self, asset: Asset, now: float, threshold_seconds: int) -> dict:
+        closed = [candle for candle in asset.candles if candle.closed and candle_color(candle) != "DOJI"]
+        state = self.pair_watch_states.get(asset.name, {})
+        if len(closed) < 3:
+            state.update(
+                {
+                    "status": "Aguardando tendencia",
+                    "alert": False,
+                    "elapsed_seconds": 0,
+                    "last_colors": self.last_pair_watch_colors(closed),
+                }
+            )
+            self.pair_watch_states[asset.name] = state
+            return state
+
+        last = closed[-1]
+        last_color = candle_color(last)
+        last_timestamp = int(last.timestamp)
+
+        if (
+            not state.get("watching")
+            and (state.get("respected") or state.get("alert"))
+            and last_timestamp == state.get("completed_timestamp")
+        ):
+            state["last_colors"] = self.last_pair_watch_colors(closed)
+            self.pair_watch_states[asset.name] = state
+            return state
+
+        if state.get("watching"):
+            state["elapsed_seconds"] = int(now - float(state.get("started_at", now)))
+            state["last_colors"] = self.last_pair_watch_colors(closed)
+            target_color = state.get("target_color")
+            if last_color == target_color and last_timestamp != state.get("first_candle_timestamp"):
+                state.update(
+                    {
+                        "watching": False,
+                        "respected": True,
+                        "alert": False,
+                        "completed_timestamp": last_timestamp,
+                        "status": f"Respeitou: 2 {self.pair_color_label(target_color)}",
+                    }
+                )
+                self.pair_watch_respected += 1
+            elif state["elapsed_seconds"] >= threshold_seconds and not state.get("trade_sent"):
+                direction = "CALL" if target_color == "GREEN" else "PUT"
+                state.update(
+                    {
+                        "watching": False,
+                        "respected": False,
+                        "alert": True,
+                        "trade_sent": True,
+                        "completed_timestamp": last_timestamp,
+                        "status": f"Nao respeitou: 1 {self.pair_color_label(target_color)}; entrada {direction}",
+                        "signal": Signal(
+                            asset=asset.name,
+                            active_id=asset.active_id,
+                            payout=asset.payout,
+                            pattern=f"Par de cores atrasado: apenas 1 {self.pair_color_label(target_color)} em {self.settings.pair_watch_minutes} minutos",
+                            direction=direction,
+                            sequence_color=target_color,
+                            timestamp=datetime.now(),
+                            strategy_window_seconds=60,
+                            max_entries=1,
+                        ),
+                    }
+                )
+                self.pair_watch_entries += 1
+            else:
+                state["status"] = (
+                    f"Marcado: 1 {self.pair_color_label(target_color)}; aguardando 2 "
+                    f"{self.pair_color_label(target_color)}"
+                )
+            self.pair_watch_states[asset.name] = state
+            return state
+
+        previous_color = candle_color(closed[-2])
+        previous_count = 0
+        for candle in reversed(closed[:-1]):
+            if candle_color(candle) != previous_color:
+                break
+            previous_count += 1
+
+        if previous_count >= 2 and last_color != previous_color and last_timestamp != state.get("completed_timestamp"):
+            trend = "ALTA" if previous_color == "GREEN" else "BAIXA"
+            state = {
+                "watching": True,
+                "respected": False,
+                "alert": False,
+                "trend": trend,
+                "target_color": last_color,
+                "first_candle_timestamp": last_timestamp,
+                "started_at": now,
+                "elapsed_seconds": 0,
+                "status": f"Marcado: 1 {self.pair_color_label(last_color)}; aguardando 2 {self.pair_color_label(last_color)}",
+                "last_colors": self.last_pair_watch_colors(closed),
+                "completed_timestamp": last_timestamp,
+            }
+        else:
+            state.update(
+                {
+                    "watching": False,
+                    "alert": False,
+                    "trend": "ALTA" if last_color == "GREEN" else "BAIXA",
+                    "target_color": "-",
+                    "elapsed_seconds": 0,
+                    "status": "Aguardando primeira cor contraria",
+                    "last_colors": self.last_pair_watch_colors(closed),
+                }
+            )
+        self.pair_watch_states[asset.name] = state
+        return state
+
     def start_trade(self, signal: Signal) -> None:
         with self.lock:
             if self.operation_open:
@@ -546,6 +729,44 @@ class WebBot:
             session_token = self.session_token
         self.trade_thread = threading.Thread(target=self.execute_trade, args=(signal, session_token), daemon=True)
         self.trade_thread.start()
+
+    def start_pair_watch_trade(self, signal: Signal) -> None:
+        with self.lock:
+            if self.operation_open:
+                return
+            self.used_signal_keys.add(self.signal_key_for_signal(signal))
+            self.operation_open = True
+            self.focused_asset = signal.asset
+            self.status = f"Operando par atrasado: {signal.pattern}"
+            self.last_signal = signal
+            if self.executor:
+                self.executor.current_trade = f"PAR ATRASADO {signal.direction} {signal.asset} - enviando entrada"
+            session_token = self.session_token
+        self.trade_thread = threading.Thread(target=self.execute_pair_watch_trade, args=(signal, session_token), daemon=True)
+        self.trade_thread.start()
+
+    def execute_pair_watch_trade(self, signal: Signal, session_token: str) -> None:
+        try:
+            if session_token != self.session_token:
+                return
+            account_mode = str(self.last_account.get("mode") or "DEMO")
+            trade = self.executor.execute_single(signal, self.settings, account_mode, "PAR ATRASADO") if self.executor else None
+            if session_token != self.session_token:
+                return
+            if trade:
+                self.add_session_cycle([trade], pattern=signal.pattern)
+                if trade.result == "WIN":
+                    self.last_green_time = bullex_now().strftime("%H:%M:%S")
+                    self.save_session_score()
+                self.finish_cycle_after_trade()
+            else:
+                self.status = self.executor.current_trade if self.executor else "Falha ao executar par atrasado"
+        finally:
+            with self.lock:
+                if session_token == self.session_token:
+                    self.operation_open = False
+            if session_token == self.session_token:
+                self.refresh_account()
 
     def execute_trade(self, signal: Signal, session_token: str) -> None:
         try:
@@ -596,6 +817,9 @@ class WebBot:
         self.session_profit = 0.0
         self.session_results = []
         self.used_signal_keys = set()
+        self.pair_watch_states = {}
+        self.pair_watch_respected = 0
+        self.pair_watch_entries = 0
         self.risk.daily_profit = 0.0
         self.last_green_time = "-"
         self.stop_reason = ""
@@ -1046,6 +1270,49 @@ class WebBot:
                 continue
         return None
 
+    def pair_watch_payload(self) -> dict:
+        rows = []
+        for asset in self.assets:
+            state = self.pair_watch_states.get(asset.name, {})
+            rows.append(
+                {
+                    "asset": asset.name,
+                    "payout": asset.payout,
+                    "trend": state.get("trend", "-"),
+                    "target_color": state.get("target_color", "-"),
+                    "elapsed_seconds": int(state.get("elapsed_seconds", 0) or 0),
+                    "status": state.get("status", "Aguardando"),
+                    "last_colors": state.get("last_colors", "-"),
+                    "watching": bool(state.get("watching")),
+                    "respected": bool(state.get("respected")),
+                    "alert": bool(state.get("alert")),
+                }
+            )
+        active = next((row for row in rows if row["alert"]), None) or next((row for row in rows if row["watching"]), None)
+        return {
+            "limit_minutes": self.settings.pair_watch_minutes,
+            "respected": self.pair_watch_respected,
+            "entries": self.pair_watch_entries,
+            "active": active,
+            "assets": rows[:8],
+        }
+
+    @staticmethod
+    def last_pair_watch_colors(candles: list[Candle]) -> str:
+        return " ".join(candle_color(candle) for candle in candles[-8:]) or "-"
+
+    @staticmethod
+    def pair_color_label(color: str | None) -> str:
+        if color == "GREEN":
+            return "verde"
+        if color == "RED":
+            return "vermelho"
+        return "-"
+
+    @staticmethod
+    def is_pair_watch_signal(signal: Signal) -> bool:
+        return (signal.pattern or "").lower().startswith("par de cores atrasado")
+
     def refresh_account(self) -> None:
         try:
             if self.client:
@@ -1116,6 +1383,7 @@ class WebBot:
             last = closed[-1] if closed else asset.current_candle
             signal = asset.signal or "-"
             hot = signal != "-" and signal != "Analisando"
+            proximity = self.asset_radar_score(asset)[0]
             rows.append(
                 {
                     "asset": asset.name,
@@ -1125,9 +1393,10 @@ class WebBot:
                     "signal": signal,
                     "color": candle_color(last) if last else "DOJI",
                     "hot": hot,
+                    "proximity": proximity,
                 }
             )
-        return sorted(rows, key=lambda row: (not row["hot"], row["asset"]))[:20]
+        return sorted(rows, key=lambda row: (-int(row.get("proximity", 0)), not row["hot"], row["asset"]))[:20]
 
     def strategy_moment_state(self, monitored_assets: list[dict]) -> dict:
         if self.operation_open and self.last_signal:
@@ -1229,6 +1498,7 @@ class WebBot:
             },
             "candles": candles,
             "monitored_assets": monitored_assets,
+            "pair_watch": self.pair_watch_payload(),
             "wins": wins,
             "losses": losses,
             "greens": wins,
@@ -1325,7 +1595,9 @@ class WebBot:
             and self.monitored_sequence_cache[0] == target_key
             and self.monitored_sequence_cache[1] == asset_names
         ):
-            return self.monitored_sequence_cache[2], None
+            cached_result = dict(self.monitored_sequence_cache[2])
+            cached_result["updated_at"] = bullex_now().strftime("%H:%M:%S")
+            return cached_result, None
 
         if not self.analysis_lock.acquire(blocking=False):
             return None, "Já existe uma análise em andamento. Aguarde alguns segundos."

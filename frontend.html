@@ -178,6 +178,111 @@
       font-weight: 500;
     }
 
+    .pair-watch-widget {
+      background: rgba(26, 26, 36, 0.34);
+      border: 1px solid var(--panel-border);
+      border-radius: 12px;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 12px;
+      color: var(--text-muted);
+    }
+
+    .pair-watch-title {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      color: var(--text);
+      font-family: var(--font-title);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .pair-watch-title i {
+      color: var(--accent);
+    }
+
+    .pair-watch-stats {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .pair-watch-stat {
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 8px;
+    }
+
+    .pair-watch-stat span {
+      display: block;
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+    }
+
+    .pair-watch-stat strong {
+      display: block;
+      margin-top: 2px;
+      color: var(--text);
+      font-size: 18px;
+      font-family: var(--font-title);
+    }
+
+    .pair-watch-active {
+      border-left: 3px solid var(--accent);
+      padding-left: 9px;
+      line-height: 1.4;
+    }
+
+    .pair-watch-list {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 180px;
+      overflow: hidden;
+    }
+
+    .pair-watch-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 8px;
+      align-items: center;
+      border-top: 1px solid rgba(255, 255, 255, 0.05);
+      padding-top: 6px;
+    }
+
+    .pair-watch-row b {
+      color: var(--text);
+      font-size: 11px;
+    }
+
+    .pair-watch-row small {
+      display: block;
+      margin-top: 2px;
+      color: var(--text-muted);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 150px;
+    }
+
+    .pair-watch-badge {
+      border-radius: 999px;
+      padding: 3px 7px;
+      font-size: 10px;
+      font-weight: 800;
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .pair-watch-badge.green { background: var(--green); color: #001b0e; }
+    .pair-watch-badge.red { background: var(--red); }
+    .pair-watch-badge.alert { background: var(--accent); }
+
     /* Main Area */
     .main-content {
       display: flex;
@@ -1453,6 +1558,28 @@
         </ul>
       </nav>
 
+      <div id="pairWatchSidebar" class="pair-watch-widget hidden">
+        <div class="pair-watch-title">
+          <i class="fa-solid fa-layer-group"></i>
+          Pares 18min
+        </div>
+        <div class="pair-watch-stats">
+          <div class="pair-watch-stat">
+            <span>Respeitou</span>
+            <strong id="pairWatchRespected">0</strong>
+          </div>
+          <div class="pair-watch-stat">
+            <span>Entradas</span>
+            <strong id="pairWatchEntries">0</strong>
+          </div>
+        </div>
+        <div class="pair-watch-active">
+          <div>Marcado: <span id="pairWatchActiveAsset" class="val">-</span></div>
+          <div>Status: <span id="pairWatchActiveStatus" class="val">Aguardando</span></div>
+        </div>
+        <div id="pairWatchRows" class="pair-watch-list"></div>
+      </div>
+
       <div class="system-status-widget">
         <div class="status-indicator">
           <span id="sysStatusDot" class="status-dot"></span>
@@ -2324,6 +2451,7 @@
           $("navBroker").classList.add("hidden");
           $("navSettings").classList.add("hidden");
           $("btnExitSidebar").classList.add("hidden");
+          $("pairWatchSidebar").classList.add("hidden");
           if (currentActivePage !== "loginPage") showLogin();
           return;
         }
@@ -2381,6 +2509,7 @@
         updateBotActionButtons(data);
         renderHistoricalTrades(data.results || []);
         renderManualAgendas(data.manual_entries || []);
+        renderPairWatchSidebar(data.pair_watch || {});
 
         // --- STATE MACHINE FLOW (Radar vs Entry vs Result) ---
         if (lastTradeCount === null) {
@@ -2605,6 +2734,51 @@
           </tr>
         `;
       }).join("");
+    }
+
+    function renderPairWatchSidebar(pairWatch) {
+      const widget = $("pairWatchSidebar");
+      if (!widget) return;
+      if (!connected) {
+        widget.classList.add("hidden");
+        return;
+      }
+
+      widget.classList.remove("hidden");
+      $("pairWatchRespected").textContent = pairWatch.respected ?? 0;
+      $("pairWatchEntries").textContent = pairWatch.entries ?? 0;
+
+      const active = pairWatch.active || null;
+      $("pairWatchActiveAsset").textContent = active?.asset ? formatAssetName(active.asset) : "-";
+      $("pairWatchActiveStatus").textContent = active?.status || `Limite ${pairWatch.limit_minutes || 18}min`;
+
+      const rows = pairWatch.assets || [];
+      if (!rows.length) {
+        $("pairWatchRows").innerHTML = `<div class="pair-watch-row"><div><b>Aguardando ativos</b><small>Inicie o monitoramento</small></div><span class="pair-watch-badge">-</span></div>`;
+        return;
+      }
+
+      $("pairWatchRows").innerHTML = rows.slice(0, 5).map(row => {
+        const color = row.target_color === "GREEN" ? "green" : row.target_color === "RED" ? "red" : "";
+        const badgeClass = row.alert ? "alert" : color;
+        const badge = row.target_color === "GREEN" ? "G" : row.target_color === "RED" ? "R" : "-";
+        return `
+          <div class="pair-watch-row">
+            <div>
+              <b>${formatAssetName(row.asset)}</b>
+              <small>${row.status || "Aguardando"} • ${formatPairWatchTime(row.elapsed_seconds || 0)}</small>
+            </div>
+            <span class="pair-watch-badge ${badgeClass}">${badge}</span>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function formatPairWatchTime(seconds) {
+      const value = Math.max(0, Number(seconds || 0));
+      const minutes = Math.floor(value / 60);
+      const secs = Math.floor(value % 60);
+      return `${String(minutes).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
     }
 
     function renderManualAgendas(entries) {

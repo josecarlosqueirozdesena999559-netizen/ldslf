@@ -1,5 +1,12 @@
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+
+try:
+    BULLEX_TIMEZONE = ZoneInfo("America/Fortaleza")
+except ZoneInfoNotFoundError:
+    BULLEX_TIMEZONE = timezone(timedelta(hours=-3))
 
 
 @dataclass(slots=True)
@@ -30,6 +37,6 @@ class Candle:
             value = int(timestamp)
             if value > 10_000_000_000:
                 value = value // 1000
-            return datetime.fromtimestamp(value, timezone.utc) - timedelta(hours=3)
+            return datetime.fromtimestamp(value, timezone.utc).astimezone(BULLEX_TIMEZONE)
         except (OSError, OverflowError, ValueError):
-            return datetime.now(timezone.utc) - timedelta(hours=3)
+            return datetime.now(BULLEX_TIMEZONE)

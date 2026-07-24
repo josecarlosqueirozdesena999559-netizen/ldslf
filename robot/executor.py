@@ -3,6 +3,7 @@ import threading
 import time
 
 from bullex.client import BullExClient
+from models.candle import BULLEX_TIMEZONE
 from models.settings import BotSettings
 from models.trade import Signal, TradeResult
 from robot.martingale import attempt_name, get_next_value
@@ -18,7 +19,7 @@ ENTRY_POLL_SECONDS = 0.03
 
 
 def operation_now() -> datetime:
-    return datetime.now().astimezone()
+    return datetime.now(BULLEX_TIMEZONE)
 
 
 class TradeExecutor:
