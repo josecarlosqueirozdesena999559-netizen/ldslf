@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import time
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from rich.live import Live
 
 from app.terminal_ui import TerminalUI
 from bullex.account import account_snapshot
 from bullex.client import BullExClient
+from models.candle import BULLEX_TIMEZONE
 from models.settings import BotSettings
 from models.trade import Signal
 from robot.executor import TradeExecutor
@@ -317,9 +318,10 @@ class RobotEngine:
                     }
                 )
             else:
+                remaining = max(0, threshold_seconds - int(state.get("elapsed_seconds", 0) or 0))
                 state["status"] = (
-                    f"Marcado: 1 {self._pair_color_label(target_color)}; aguardando 2 "
-                    f"{self._pair_color_label(target_color)}"
+                    f"Nasceu 1 {self._pair_color_label(target_color)} as {state.get('first_candle_time', '-')}; "
+                    f"aguardando 2 {self._pair_color_label(target_color)} ({remaining // 60:02d}:{remaining % 60:02d})"
                 )
             self.pair_watch_states[asset.name] = state
             return state
@@ -333,6 +335,8 @@ class RobotEngine:
 
         if previous_count >= 2 and last_color != previous_color and last_timestamp != state.get("completed_timestamp"):
             trend = "ALTA" if previous_color == "GREEN" else "BAIXA"
+            first_time = datetime.fromtimestamp(last_timestamp, BULLEX_TIMEZONE)
+            deadline_time = first_time + timedelta(seconds=threshold_seconds)
             state = {
                 "watching": True,
                 "respected": False,
@@ -340,9 +344,11 @@ class RobotEngine:
                 "trend": trend,
                 "target_color": last_color,
                 "first_candle_timestamp": last_timestamp,
+                "first_candle_time": first_time.strftime("%H:%M:%S"),
+                "deadline_time": deadline_time.strftime("%H:%M:%S"),
                 "started_at": now,
                 "elapsed_seconds": 0,
-                "status": f"Marcado: 1 {self._pair_color_label(last_color)}; aguardando 2 {self._pair_color_label(last_color)}",
+                "status": f"Nasceu 1 {self._pair_color_label(last_color)} as {first_time.strftime('%H:%M:%S')}; aguardando 2 ate {deadline_time.strftime('%H:%M:%S')}",
                 "last_colors": self._last_pair_watch_colors(closed),
                 "completed_timestamp": last_timestamp,
             }
@@ -354,6 +360,8 @@ class RobotEngine:
                     "trend": "ALTA" if last_color == "GREEN" else "BAIXA",
                     "target_color": "-",
                     "elapsed_seconds": 0,
+                    "first_candle_time": "-",
+                    "deadline_time": "-",
                     "status": "Aguardando primeira cor contraria",
                     "last_colors": self._last_pair_watch_colors(closed),
                 }

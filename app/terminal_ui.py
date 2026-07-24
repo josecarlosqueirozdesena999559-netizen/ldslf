@@ -124,7 +124,7 @@ class TerminalUI:
 
     def render_pair_watch_table(self, assets: list[Asset], states: dict[str, dict], settings: BotSettings) -> Panel:
         table = Table(box=box.SIMPLE_HEAVY, expand=True)
-        for column in ("Ativo", "Payout", "Ultimas cores", "Tendencia", "Marcado", "Tempo", "Status"):
+        for column in ("Ativo", "Payout", "Ultimas cores", "Tendencia", "Marcado", "Nasceu", "Limite", "Tempo", "Status"):
             table.add_column(column, no_wrap=False)
 
         for asset in assets:
@@ -139,6 +139,8 @@ class TerminalUI:
                 self._format_pair_watch_colors(state.get("last_colors", "-")),
                 state.get("trend", "-"),
                 self._format_pair_watch_color(target),
+                state.get("first_candle_time", "-"),
+                state.get("deadline_time", "-"),
                 elapsed,
                 status,
                 style=style,

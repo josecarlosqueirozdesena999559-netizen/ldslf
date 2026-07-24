@@ -670,9 +670,10 @@ class WebBot:
                 )
                 self.pair_watch_entries += 1
             else:
+                remaining = max(0, threshold_seconds - int(state.get("elapsed_seconds", 0) or 0))
                 state["status"] = (
-                    f"Marcado: 1 {self.pair_color_label(target_color)}; aguardando 2 "
-                    f"{self.pair_color_label(target_color)}"
+                    f"Nasceu 1 {self.pair_color_label(target_color)} as {state.get('first_candle_time', '-')}; "
+                    f"aguardando 2 {self.pair_color_label(target_color)} ({remaining // 60:02d}:{remaining % 60:02d})"
                 )
             self.pair_watch_states[asset.name] = state
             return state
@@ -686,6 +687,8 @@ class WebBot:
 
         if previous_count >= 2 and last_color != previous_color and last_timestamp != state.get("completed_timestamp"):
             trend = "ALTA" if previous_color == "GREEN" else "BAIXA"
+            first_time = datetime.fromtimestamp(last_timestamp, BULLEX_TIMEZONE)
+            deadline_time = first_time + timedelta(seconds=threshold_seconds)
             state = {
                 "watching": True,
                 "respected": False,
@@ -693,9 +696,11 @@ class WebBot:
                 "trend": trend,
                 "target_color": last_color,
                 "first_candle_timestamp": last_timestamp,
+                "first_candle_time": first_time.strftime("%H:%M:%S"),
+                "deadline_time": deadline_time.strftime("%H:%M:%S"),
                 "started_at": now,
                 "elapsed_seconds": 0,
-                "status": f"Marcado: 1 {self.pair_color_label(last_color)}; aguardando 2 {self.pair_color_label(last_color)}",
+                "status": f"Nasceu 1 {self.pair_color_label(last_color)} as {first_time.strftime('%H:%M:%S')}; aguardando 2 ate {deadline_time.strftime('%H:%M:%S')}",
                 "last_colors": self.last_pair_watch_colors(closed),
                 "completed_timestamp": last_timestamp,
             }
@@ -707,6 +712,8 @@ class WebBot:
                     "trend": "ALTA" if last_color == "GREEN" else "BAIXA",
                     "target_color": "-",
                     "elapsed_seconds": 0,
+                    "first_candle_time": "-",
+                    "deadline_time": "-",
                     "status": "Aguardando primeira cor contraria",
                     "last_colors": self.last_pair_watch_colors(closed),
                 }
@@ -1276,15 +1283,21 @@ class WebBot:
 
     def pair_watch_payload(self) -> dict:
         rows = []
+        limit_seconds = self.settings.pair_watch_minutes * 60
         for asset in self.assets:
             state = self.pair_watch_states.get(asset.name, {})
+            elapsed = int(state.get("elapsed_seconds", 0) or 0)
+            remaining = max(0, limit_seconds - elapsed) if state.get("watching") else 0
             rows.append(
                 {
                     "asset": asset.name,
                     "payout": asset.payout,
                     "trend": state.get("trend", "-"),
                     "target_color": state.get("target_color", "-"),
-                    "elapsed_seconds": int(state.get("elapsed_seconds", 0) or 0),
+                    "elapsed_seconds": elapsed,
+                    "remaining_seconds": remaining,
+                    "first_candle_time": state.get("first_candle_time", "-"),
+                    "deadline_time": state.get("deadline_time", "-"),
                     "status": state.get("status", "Aguardando"),
                     "last_colors": state.get("last_colors", "-"),
                     "watching": bool(state.get("watching")),
@@ -1292,13 +1305,20 @@ class WebBot:
                     "alert": bool(state.get("alert")),
                 }
             )
+        rows.sort(
+            key=lambda row: (
+                0 if row["alert"] else 1 if row["watching"] else 2 if row["respected"] else 3,
+                row["remaining_seconds"] if row["watching"] else 999999,
+                row["asset"],
+            )
+        )
         active = next((row for row in rows if row["alert"]), None) or next((row for row in rows if row["watching"]), None)
         return {
             "limit_minutes": self.settings.pair_watch_minutes,
             "respected": self.pair_watch_respected,
             "entries": self.pair_watch_entries,
             "active": active,
-            "assets": rows[:8],
+            "assets": rows[:20],
         }
 
     @staticmethod

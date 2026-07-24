@@ -1876,7 +1876,28 @@
               <div>Marcado: <span id="pairWatchActiveAsset" class="val">-</span></div>
               <div>Status: <span id="pairWatchActiveStatus" class="val">Aguardando</span></div>
             </div>
-            <div id="pairWatchRows" class="pair-watch-list" style="max-height: none;"></div>
+            <div class="table-container">
+              <table class="data-table">
+                <thead>
+                  <tr>
+                    <th>Ativo</th>
+                    <th>Payout</th>
+                    <th>Tendencia</th>
+                    <th>Cor marcada</th>
+                    <th>Nasceu</th>
+                    <th>Limite</th>
+                    <th>Tempo</th>
+                    <th>Status</th>
+                    <th>Ultimas cores</th>
+                  </tr>
+                </thead>
+                <tbody id="pairWatchRows">
+                  <tr>
+                    <td colspan="9" style="text-align: center; color: var(--text-muted);">Aguardando ativos monitorados.</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       </section>
@@ -2801,28 +2822,48 @@
 
       const active = pairWatch.active || null;
       $("pairWatchActiveAsset").textContent = active?.asset ? formatAssetName(active.asset) : "-";
-      $("pairWatchActiveStatus").textContent = active?.status || `Limite ${pairWatch.limit_minutes || 18}min`;
+      $("pairWatchActiveStatus").textContent = active
+        ? `${active.status || "Monitorando"} | nasceu ${active.first_candle_time || "-"} | limite ${active.deadline_time || "-"}`
+        : `Limite ${pairWatch.limit_minutes || 18}min`;
 
       const rows = pairWatch.assets || [];
       if (!rows.length) {
-        $("pairWatchRows").innerHTML = `<div class="pair-watch-row"><div><b>Aguardando ativos</b><small>Inicie o monitoramento</small></div><span class="pair-watch-badge">-</span></div>`;
+        $("pairWatchRows").innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Aguardando ativos monitorados.</td></tr>`;
         return;
       }
 
-      $("pairWatchRows").innerHTML = rows.slice(0, 5).map(row => {
+      $("pairWatchRows").innerHTML = rows.map(row => {
         const color = row.target_color === "GREEN" ? "green" : row.target_color === "RED" ? "red" : "";
         const badgeClass = row.alert ? "alert" : color;
         const badge = row.target_color === "GREEN" ? "G" : row.target_color === "RED" ? "R" : "-";
+        const elapsed = formatPairWatchTime(row.elapsed_seconds || 0);
+        const remaining = row.watching ? `restam ${formatPairWatchTime(row.remaining_seconds || 0)}` : elapsed;
         return `
-          <div class="pair-watch-row">
-            <div>
-              <b>${formatAssetName(row.asset)}</b>
-              <small>${row.status || "Aguardando"} • ${formatPairWatchTime(row.elapsed_seconds || 0)}</small>
-            </div>
-            <span class="pair-watch-badge ${badgeClass}">${badge}</span>
-          </div>
+          <tr>
+            <td><strong>${formatAssetName(row.asset)}</strong></td>
+            <td>${row.payout ?? 0}%</td>
+            <td>${row.trend || "-"}</td>
+            <td><span class="pair-watch-badge ${badgeClass}">${badge}</span></td>
+            <td>${row.first_candle_time || "-"}</td>
+            <td>${row.deadline_time || "-"}</td>
+            <td>${remaining}</td>
+            <td><span style="font-size: 13px; color: var(--text-muted);">${row.status || "Aguardando"}</span></td>
+            <td>${formatPairWatchColors(row.last_colors || "-")}</td>
+          </tr>
         `;
       }).join("");
+    }
+
+    function formatPairWatchColors(colors) {
+      return String(colors || "-")
+        .split(" ")
+        .filter(Boolean)
+        .map(color => {
+          const cls = color === "GREEN" ? "green" : color === "RED" ? "red" : "";
+          const label = color === "GREEN" ? "V" : color === "RED" ? "R" : "-";
+          return `<span class="pair-watch-badge ${cls}" style="margin-right: 4px;">${label}</span>`;
+        })
+        .join("") || "-";
     }
 
     function formatPairWatchTime(seconds) {
