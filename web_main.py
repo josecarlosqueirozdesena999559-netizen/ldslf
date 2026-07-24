@@ -195,8 +195,8 @@ class WebBot:
         self.starting = False
         self.auto_trade = True
         self.manual_paused = False
-        self.active_strategy = "8 candles"
-        self.next_strategy = "Reversao 3/4/5, continuacao 4/5/6, MA21 5/6/7 ou compra no 33"
+        self.active_strategy = "Estrategia 01"
+        self.next_strategy = "Monitorando todas as estrategias sem ordem fixa: 8 verdes + reversoes, padroes alternados, MA21/33s e pares 18min"
         self.schedule_enabled = False
         self.schedule_start = ""
         self.schedule_stop = ""
@@ -267,12 +267,12 @@ class WebBot:
         try:
             return result_queue.get(timeout=LOGIN_TIMEOUT_SECONDS)
         except queue.Empty:
-            return False, "Tempo limite ao conectar na BullEx. Verifique senha, bloqueio por IP/VPS ou sessão aberta em outro lugar."
+            return False, "Tempo limite ao conectar na BullEx. Verifique senha, bloqueio por IP/VPS ou sessÃ£o aberta em outro lugar."
 
     def start(self, auto_trade: bool = True, reset_stats: bool = True) -> tuple[bool, str | None]:
         with self.lock:
             if not self.client or not self.connected:
-                return False, "Faça login primeiro."
+                return False, "FaÃ§a login primeiro."
             if auto_trade and not self.settings_saved:
                 self.status = "Salve as configuracoes antes de iniciar"
                 return False, "Salve as configuracoes antes de iniciar."
@@ -286,8 +286,8 @@ class WebBot:
             self.starting = True
             self.manual_paused = False
             self.auto_trade = auto_trade
-            self.active_strategy = "8 candles"
-            self.next_strategy = "Reversao 3/4/5, continuacao 4/5/6, MA21 5/6/7 ou compra no 33"
+            self.active_strategy = "Estrategia 01"
+            self.next_strategy = "Monitorando todas as estrategias sem ordem fixa: 8 verdes + reversoes, padroes alternados, MA21/33s e pares 18min"
             self.status = "Carregando ativos"
 
         try:
@@ -295,13 +295,13 @@ class WebBot:
             if not assets:
                 with self.lock:
                     self.starting = False
-                    self.status = "Nenhum ativo aberto com payout mínimo"
-                return False, "Nenhum ativo aberto com payout mínimo."
+                    self.status = "Nenhum ativo aberto com payout mÃ­nimo"
+                return False, "Nenhum ativo aberto com payout mÃ­nimo."
             for asset in assets:
                 self.client.start_candles_stream(asset.name, self.settings.timeframe, CANDLE_LOOKBACK)
             with self.lock:
                 self.assets = assets
-                self.status = "Carregando candles para estrategias de 8 candles"
+                self.status = "Carregando candles para estrategias"
             self.load_initial_candles()
         except Exception as exc:
             with self.lock:
@@ -551,12 +551,16 @@ class WebBot:
             return 85
         if "velas 5, 6 e 7" in pattern:
             return 80
-        if "velas 4, 5 e 6" in pattern:
+        if "estrategia 03" in pattern:
             return 75
+        if "estrategia 04" in pattern:
+            return 82
+        if "estrategia 05" in pattern:
+            return 82
+        if "estrategia 01" in pattern:
+            return 88
         if "velas 3, 4 e 5" in pattern:
             return 70
-        if "8 candles seguidos" in pattern:
-            return 65
         return 50
 
     def find_best_signal(self) -> Signal | None:
@@ -793,11 +797,11 @@ class WebBot:
                     self.last_signal = None
                     self.used_signal_keys.discard(self.signal_key_for_signal(signal))
                 elif self.executor and "stop win" in self.executor.current_trade.lower():
-                    self.stop_reason = "STOP WIN atingido. Robô parado."
+                    self.stop_reason = "STOP WIN atingido. RobÃ´ parado."
                     self.status = self.stop_reason
                     self.running = False
                 elif self.executor and "stop loss" in self.executor.current_trade.lower():
-                    self.stop_reason = "STOP LOSS atingido. Robô parado."
+                    self.stop_reason = "STOP LOSS atingido. RobÃ´ parado."
                     self.status = self.stop_reason
                     self.running = False
                 else:
@@ -842,7 +846,7 @@ class WebBot:
             self.session_losses += 1
         self.session_profit = round(self.session_profit + profit, 2)
         
-        motivo = pattern or "Estratégia do Robô"
+        motivo = pattern or "EstratÃ©gia do RobÃ´"
             
         self.session_results.insert(
             0,
@@ -862,17 +866,17 @@ class WebBot:
 
     def finish_cycle_after_trade(self) -> None:
         if self.risk.check_stop_win(self.settings):
-            self.stop_reason = "STOP WIN atingido. Robô parado."
+            self.stop_reason = "STOP WIN atingido. RobÃ´ parado."
             self.status = self.stop_reason
             self.running = False
             return
         if self.risk.check_stop_loss(self.settings):
-            self.stop_reason = "STOP LOSS atingido. Robô parado."
+            self.stop_reason = "STOP LOSS atingido. RobÃ´ parado."
             self.status = self.stop_reason
             self.running = False
             return
-        self.next_strategy = "Reversao 3/4/5, continuacao 4/5/6, MA21 5/6/7 ou compra no 33"
-        self.active_strategy = "8 candles"
+        self.next_strategy = "Monitorando todas as estrategias sem ordem fixa: 8 verdes + reversoes, padroes alternados, MA21/33s e pares 18min"
+        self.active_strategy = "Estrategia 01"
         self.status = "Escaneando ativos em tempo real / aguardando sinal"
 
     def start_scheduler(self) -> None:
@@ -1063,9 +1067,9 @@ class WebBot:
         if not asset:
             return False, "Informe o nome do ativo."
         if not direction:
-            return False, "Direção inválida. Use COMPRA/CALL ou VENDA/PUT."
+            return False, "DireÃ§Ã£o invÃ¡lida. Use COMPRA/CALL ou VENDA/PUT."
         if not entry_time:
-            return False, "Horário inválido. Use HH:MM ou HH:MM:SS."
+            return False, "HorÃ¡rio invÃ¡lido. Use HH:MM ou HH:MM:SS."
 
         entry = {
             "id": uuid.uuid4().hex,
@@ -1146,7 +1150,7 @@ class WebBot:
                     self.save_session_score()
                 entry["status"] = "WIN" if win_trade else trade.result
                 entry["last_executed_date"] = bullex_now().strftime("%Y-%m-%d")
-                entry["message"] = f"Resultado automático: {'WIN' if win_trade else trade.result} lucro {sum(float(item.profit or 0) for item in cycle_trades or [trade]):.2f}"
+                entry["message"] = f"Resultado automÃ¡tico: {'WIN' if win_trade else trade.result} lucro {sum(float(item.profit or 0) for item in cycle_trades or [trade]):.2f}"
             else:
                 entry["status"] = "FALHOU"
                 entry["message"] = self.executor.current_trade if self.executor else "Falha ao executar"
@@ -1427,7 +1431,7 @@ class WebBot:
         return {
             "asset": None,
             "title": "Escaneando estrategias sem ordem fixa",
-            "detail": "8 candles, reversao, continuacao, MA21 contra, compra no segundo 33 e rompimento MA21 aos 33s",
+            "detail": "Estrategia 01, estrategia 03, estrategia 04, estrategia 05, MA21 contra, compra no segundo 33, rompimento MA21 aos 33s e pares 18min",
         }
 
     def state(self) -> dict:
@@ -1481,8 +1485,8 @@ class WebBot:
             "manual_paused": self.manual_paused,
             "settings_saved": self.settings_saved,
             "account": self.last_account,
-            "strategy": "8 candles",
-            "strategy_detail": "Reversao: 2 candles contrarios e entradas 3/4/5. Continuacao: 3 candles iguais e entradas 4/5/6. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde acima da MA21 fechado depois de 33s, com entrada + G1. CALL 33 MA21: candle verde rompe a MA21 para cima; candle seguinte fica negativo aos 33s e fecha verde positivo, CALL nas velas 3/4/5 com G1. PUT 33 MA21: candle vermelho rompe a MA21 para baixo; candle seguinte fica verde aos 33s e fecha vermelho negativo, PUT nas velas 3/4/5 com G1. Sempre com martingale dobrando.",
+            "strategy": "Estrategia 01",
+            "strategy_detail": "Estrategias analisadas sem ordem fixa. 8 verdes seguidos + reversao com 2 vermelhos: entrada PUT contra a tendencia com entrada, G1 e G2. 8 verdes seguidos + 9o candle vermelho + mais 2 vermelhos: entrada CALL com G1 se der loss. Vermelho, verde, vermelho e verde: proxima entrada PUT; se der loss, G1 em CALL. Verde, vermelho, verde e vermelho: proxima entrada CALL; se der loss, G1 em PUT. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde rompe a MA21, termina acima depois de 33s, com apenas 1 ou 2 verdes antes, entrada + G1. CALL 33 MA21: candle verde rompe a MA21 para cima; candle seguinte fica negativo aos 33s e fecha verde positivo, CALL com entrada + G1. PUT 33 MA21: candle vermelho rompe a MA21 para baixo; candle seguinte fica verde aos 33s e fecha vermelho negativo, PUT com entrada + G1. Pares 18min: 1 verde atrasado CALL, 1 vermelho atrasado PUT.",
             "strategy_moment": strategy_moment["title"],
             "strategy_moment_detail": strategy_moment["detail"],
             "target_sequence": self.active_strategy,
@@ -1490,7 +1494,7 @@ class WebBot:
             "asset": focus.name if focus else None,
             "sequence": self.visual_sequence(focus) if focus else "-",
             "signal": signal_payload(self.last_signal) if self.last_signal else None,
-            "trade": self.executor.current_trade if self.executor else "Nenhuma operação",
+            "trade": self.executor.current_trade if self.executor else "Nenhuma operaÃ§Ã£o",
             "last_green_time": self.last_green_time,
             "moving_average": {
                 key: round(value, 6) if isinstance(value, float) else value
@@ -1523,7 +1527,7 @@ class WebBot:
 
     def hourly_sequences(self, requested_asset: str) -> tuple[dict | None, str | None]:
         if not self.client or not self.connected:
-            return None, "Faça login na BullEx primeiro."
+            return None, "FaÃ§a login na BullEx primeiro."
         requested_asset = requested_asset.strip().upper()
         if not requested_asset:
             return None, "Informe o nome do ativo."
@@ -1533,7 +1537,7 @@ class WebBot:
             return cached[1], None
 
         if not self.analysis_lock.acquire(blocking=False):
-            return None, "Já existe uma análise em andamento. Aguarde alguns segundos."
+            return None, "JÃ¡ existe uma anÃ¡lise em andamento. Aguarde alguns segundos."
         try:
             asset = self.client.resolve_active_name(requested_asset)
             endtime = int(time.time())
@@ -1553,13 +1557,13 @@ class WebBot:
             }
             rows = analyze_hourly_sequences(list(unique.values()))
             if not rows:
-                return None, f"Nenhum candle histórico encontrado para {asset}."
+                return None, f"Nenhum candle histÃ³rico encontrado para {asset}."
 
             best = max(rows, key=lambda row: row["sequence"])
             result = {
                 "ok": True,
                 "asset": asset,
-                "period": "Últimas 24 horas",
+                "period": "Ãšltimas 24 horas",
                 "updated_at": bullex_now().strftime("%H:%M:%S"),
                 "total_candles": len(unique),
                 "best": best,
@@ -1569,13 +1573,13 @@ class WebBot:
             self.sequence_cache[requested_asset] = (time.time(), result)
             return result, None
         except Exception as exc:
-            return None, f"Não foi possível consultar {requested_asset}: {exc}"
+            return None, f"NÃ£o foi possÃ­vel consultar {requested_asset}: {exc}"
         finally:
             self.analysis_lock.release()
 
     def monitored_hourly_sequences(self, force: bool = False) -> tuple[dict | None, str | None]:
         if not self.client or not self.connected:
-            return None, "Faça login na BullEx primeiro."
+            return None, "FaÃ§a login na BullEx primeiro."
 
         monitored = self.assets or [
             Asset(name=name, active_id=0, payout=0, open=True)
@@ -1600,7 +1604,7 @@ class WebBot:
             return cached_result, None
 
         if not self.analysis_lock.acquire(blocking=False):
-            return None, "Já existe uma análise em andamento. Aguarde alguns segundos."
+            return None, "JÃ¡ existe uma anÃ¡lise em andamento. Aguarde alguns segundos."
         try:
             rows = []
             for asset in monitored:
@@ -1709,7 +1713,7 @@ class WebBot:
             }
             result = {
                 "ok": True,
-                "period": f"{target_time.strftime('%d/%m %H:00')}–{target_time.strftime('%H:59')}",
+                "period": f"{target_time.strftime('%d/%m %H:00')}â€“{target_time.strftime('%H:59')}",
                 "day": target_time.strftime("%d/%m/%Y"),
                 "updated_at": bullex_now().strftime("%H:%M:%S"),
                 "next_update": (target_time + timedelta(hours=1)).strftime("%H:00"),
@@ -1933,8 +1937,8 @@ HTML = r"""
         <option value="DEMO">DEMO</option>
         <option value="REAL">REAL</option>
       </select>
-      <label>Confirmação REAL</label>
-      <input id="realConfirmation" placeholder="Digite CONFIRMO REAL para liberar operações reais" />
+      <label>ConfirmaÃ§Ã£o REAL</label>
+      <input id="realConfirmation" placeholder="Digite CONFIRMO REAL para liberar operaÃ§Ãµes reais" />
       <p id="loginMsg" class="yellow"></p>
       <button onclick="login()">Entrar</button>
     </section>
@@ -1949,7 +1953,7 @@ HTML = r"""
         <button class="secondary" onclick="monitorOnly()">Somente monitorar</button>
         <button class="secondary" onclick="showResults()">Resultados</button>
         <button class="danger" onclick="logout()">Deslogar</button>
-        <button class="danger" onclick="stopBot()">Parar robô</button>
+        <button class="danger" onclick="stopBot()">Parar robÃ´</button>
       </div>
     </section>
 
@@ -1966,36 +1970,36 @@ HTML = r"""
 
     <section id="monitor" class="hidden">
       <div class="topline">
-        <h2>Análise em tempo real</h2>
+        <h2>AnÃ¡lise em tempo real</h2>
         <p id="status" class="status">Aguardando...</p>
       </div>
       <div id="pausePanel" class="panel pause hidden"></div>
       <div id="analysisPanel" class="grid">
         <div class="panel">
           <h2 id="asset">Aguardando ativo</h2>
-          <p id="sequence" class="status">Estratégia do momento: 8 candles</p>
+          <p id="sequence" class="status">EstratÃ©gia do momento: EstratÃ©gia 01</p>
           <p id="signal" class="status">Sinal: aguardando</p>
           <div id="liveColor" class="badge doji">DOJI</div>
           <div id="price" class="price">-</div>
           <p id="ohlc" class="status"></p>
         </div>
         <div class="panel">
-          <h2>Últimas velas</h2>
+          <h2>Ãšltimas velas</h2>
           <table>
-            <thead><tr><th>Hora</th><th>Cor</th><th>Status</th><th>Preço</th><th>Mov.</th></tr></thead>
+            <thead><tr><th>Hora</th><th>Cor</th><th>Status</th><th>PreÃ§o</th><th>Mov.</th></tr></thead>
             <tbody id="candles"></tbody>
           </table>
         </div>
       </div>
       <div class="panel" style="margin-top:14px;">
-        <h2>Operação</h2>
-        <p id="trade">Nenhuma operação</p>
-        <p>Último GREEN: <strong id="lastGreen" class="green">-</strong></p>
+        <h2>OperaÃ§Ã£o</h2>
+        <p id="trade">Nenhuma operaÃ§Ã£o</p>
+        <p>Ãšltimo GREEN: <strong id="lastGreen" class="green">-</strong></p>
       </div>
       <div class="panel" style="margin-top:14px;">
         <h2>Ativos monitorados</h2>
         <table>
-          <thead><tr><th>Ativo</th><th>Payout</th><th>Cor</th><th>Sequência</th><th>Padrão</th></tr></thead>
+          <thead><tr><th>Ativo</th><th>Payout</th><th>Cor</th><th>SequÃªncia</th><th>PadrÃ£o</th></tr></thead>
           <tbody id="monitoredAssets"></tbody>
         </table>
       </div>
@@ -2108,21 +2112,21 @@ HTML = r"""
       $("greens").textContent = data.connected ? data.greens : "-";
       $("losses").textContent = data.connected ? data.losses : "-";
       $("profit").textContent = data.connected ? Number(data.profit || 0).toFixed(2) : "-";
-      $("trade").textContent = data.trade || "Nenhuma operação";
+      $("trade").textContent = data.trade || "Nenhuma operaÃ§Ã£o";
       $("lastGreen").textContent = data.last_green_time || "-";
 
       if (data.paused) {
         $("pausePanel").classList.remove("hidden");
         $("analysisPanel").classList.add("hidden");
-        $("pausePanel").innerHTML = `<h2>${data.status}</h2><p>Último GREEN: <b class="green">${data.last_green_time}</b></p><p>Saldo: <b>${$("balance").textContent}</b></p>`;
+        $("pausePanel").innerHTML = `<h2>${data.status}</h2><p>Ãšltimo GREEN: <b class="green">${data.last_green_time}</b></p><p>Saldo: <b>${$("balance").textContent}</b></p>`;
         return;
       }
 
       $("pausePanel").classList.add("hidden");
       $("analysisPanel").classList.remove("hidden");
       $("asset").textContent = data.asset || "Aguardando ativo";
-      $("sequence").textContent = `Estratégia do momento: ${data.strategy || "8 candles"} - reversao 3/4/5, continuacao 4/5/6, MA21 5/6/7 ou compra no 33`;
-      $("signal").textContent = data.signal ? `Sinal: ${data.signal.direction} (${data.signal.pattern})` : "Sinal: aguardando 8 candles";
+      $("sequence").textContent = `EstratÃ©gia do momento: ${data.strategy || "Estrategia 01"} - 8 verdes + 2 vermelhos, estrategia 03, estrategia 04, estrategia 05, MA21, compra no 33 ou pares 18min`;
+      $("signal").textContent = data.signal ? `Sinal: ${data.signal.direction} (${data.signal.pattern})` : "Sinal: aguardando estrategia";
       const last = data.candles[data.candles.length - 1];
       if (last) {
         const cls = last.color === "GREEN" ? "green" : last.color === "RED" ? "red" : "doji";
@@ -2130,7 +2134,7 @@ HTML = r"""
         $("liveColor").textContent = last.color === "GREEN" ? "VERDE" : last.color === "RED" ? "VERMELHA" : "DOJI";
         $("price").textContent = Number(last.price).toFixed(6);
         $("price").className = `price ${cls === "red" ? "red" : cls === "green" ? "green" : ""}`;
-        $("ohlc").textContent = `Abertura: ${last.open}  Máxima: ${last.high}  Mínima: ${last.low}  Tick: ${last.tick}s`;
+        $("ohlc").textContent = `Abertura: ${last.open}  MÃ¡xima: ${last.high}  MÃ­nima: ${last.low}  Tick: ${last.tick}s`;
       }
       $("candles").innerHTML = data.candles.map(c => {
         const cls = c.color === "GREEN" ? "green" : c.color === "RED" ? "red" : "doji";
@@ -2147,6 +2151,4 @@ HTML = r"""
 </body>
 </html>
 """
-
-
 

@@ -49,6 +49,10 @@ class TradeExecutor:
 
     @staticmethod
     def direction_for_step(signal: Signal, step: int) -> str:
+        if "estrategia 04" in (signal.pattern or "").lower() and step >= 1:
+            return "CALL"
+        if "estrategia 05" in (signal.pattern or "").lower() and step >= 1:
+            return "PUT"
         return signal.direction
 
     @staticmethod

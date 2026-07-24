@@ -283,6 +283,31 @@
     .pair-watch-badge.red { background: var(--red); }
     .pair-watch-badge.alert { background: var(--accent); }
 
+    #pairWatchPage .pair-watch-widget {
+      gap: 16px;
+      font-size: 13px;
+    }
+
+    #pairWatchPage .pair-watch-list {
+      gap: 10px;
+    }
+
+    #pairWatchPage .pair-watch-row {
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 8px;
+      padding: 12px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    #pairWatchPage .pair-watch-row b {
+      font-size: 13px;
+    }
+
+    #pairWatchPage .pair-watch-row small {
+      max-width: none;
+      white-space: normal;
+    }
+
     /* Main Area */
     .main-content {
       display: flex;
@@ -1039,7 +1064,7 @@
       width: 100%;
       overflow-x: auto;
       margin-top: 15px;
-      background: var(--panel-bg);
+      background: rgba(255, 255, 255, 0.018);
       border: 1px solid var(--panel-border);
       border-radius: 12px;
     }
@@ -1064,7 +1089,7 @@
       font-size: 12px;
       text-transform: uppercase;
       letter-spacing: 0.5px;
-      background-color: rgba(255, 102, 0, 0.02);
+      background-color: rgba(255, 102, 0, 0.035);
     }
 
     table.data-table tbody tr {
@@ -1546,6 +1571,11 @@
             </button>
           </li>
           <li>
+            <button id="navPairWatch" class="nav-btn hidden" onclick="showPairWatchPage()">
+              <i class="fa-solid fa-layer-group"></i> Pares 18min
+            </button>
+          </li>
+          <li>
             <button id="navBroker" class="nav-btn hidden" onclick="showBrokerPage()">
               <i class="fa-solid fa-chart-line"></i> BullEx Ao Vivo
             </button>
@@ -1557,28 +1587,6 @@
           </li>
         </ul>
       </nav>
-
-      <div id="pairWatchSidebar" class="pair-watch-widget hidden">
-        <div class="pair-watch-title">
-          <i class="fa-solid fa-layer-group"></i>
-          Pares 18min
-        </div>
-        <div class="pair-watch-stats">
-          <div class="pair-watch-stat">
-            <span>Respeitou</span>
-            <strong id="pairWatchRespected">0</strong>
-          </div>
-          <div class="pair-watch-stat">
-            <span>Entradas</span>
-            <strong id="pairWatchEntries">0</strong>
-          </div>
-        </div>
-        <div class="pair-watch-active">
-          <div>Marcado: <span id="pairWatchActiveAsset" class="val">-</span></div>
-          <div>Status: <span id="pairWatchActiveStatus" class="val">Aguardando</span></div>
-        </div>
-        <div id="pairWatchRows" class="pair-watch-list"></div>
-      </div>
 
       <div class="system-status-widget">
         <div class="status-indicator">
@@ -1840,6 +1848,39 @@
         </div>
       </section>
 
+      <!-- PAGE: PARES 18MIN -->
+      <section id="pairWatchPage" class="hidden">
+        <div class="panel">
+          <div class="sequences-header-row">
+            <div>
+              <h2 class="panel-title" style="margin-bottom: 5px;"><i class="fa-solid fa-layer-group"></i> Monitor Pares 18min</h2>
+              <p style="color: var(--text-muted); font-size: 13px;">Monitora a primeira vela contraria apos tendencia e executa quando o segundo par nao respeita o limite.</p>
+            </div>
+            <button onclick="refresh()" class="btn-refresh">
+              <i class="fa-solid fa-rotate"></i> Atualizar Agora
+            </button>
+          </div>
+
+          <div class="pair-watch-widget" style="margin-top: 18px;">
+            <div class="pair-watch-stats">
+              <div class="pair-watch-stat">
+                <span>Respeitou</span>
+                <strong id="pairWatchRespected">0</strong>
+              </div>
+              <div class="pair-watch-stat">
+                <span>Entradas</span>
+                <strong id="pairWatchEntries">0</strong>
+              </div>
+            </div>
+            <div class="pair-watch-active">
+              <div>Marcado: <span id="pairWatchActiveAsset" class="val">-</span></div>
+              <div>Status: <span id="pairWatchActiveStatus" class="val">Aguardando</span></div>
+            </div>
+            <div id="pairWatchRows" class="pair-watch-list" style="max-height: none;"></div>
+          </div>
+        </div>
+      </section>
+
       <!-- PAGE: ATIVOS POR HORA (SEQUENCES) -->
       <section id="sequencesPage" class="hidden">
         <div class="panel">
@@ -2047,11 +2088,12 @@
     let targetX = 100;
     let targetY = 100;
 
-    const pages = ["loginPage", "inicioPage", "sequencesPage", "brokerPage", "settingsPage"];
+    const pages = ["loginPage", "inicioPage", "sequencesPage", "pairWatchPage", "brokerPage", "settingsPage"];
     const navs = {
       loginPage: "navLogin",
       inicioPage: "navInicio",
       sequencesPage: "navSequences",
+      pairWatchPage: "navPairWatch",
       brokerPage: "navBroker",
       settingsPage: "navSettings"
     };
@@ -2095,6 +2137,16 @@
       startPolling();
       loadMonitoredSequences();
       scheduleSequenceRefresh();
+    }
+
+    async function showPairWatchPage() {
+      if (!connected) {
+        showLogin();
+        return;
+      }
+      setPage("pairWatchPage", "Pares 18min");
+      startPolling();
+      await refresh();
     }
 
     function showSettingsPage() {
@@ -2170,6 +2222,7 @@
         $("navLogin").classList.add("hidden");
         $("navInicio").classList.remove("hidden");
         $("navSequences").classList.remove("hidden");
+        $("navPairWatch").classList.remove("hidden");
         $("navBroker").classList.remove("hidden");
         $("navSettings").classList.remove("hidden");
         $("btnExitSidebar").classList.remove("hidden");
@@ -2282,6 +2335,7 @@
       $("navLogin").classList.remove("hidden");
       $("navInicio").classList.add("hidden");
       $("navSequences").classList.add("hidden");
+      $("navPairWatch").classList.add("hidden");
       $("navBroker").classList.add("hidden");
       $("navSettings").classList.add("hidden");
       $("btnExitSidebar").classList.add("hidden");
@@ -2440,6 +2494,7 @@
           $("navLogin").classList.add("hidden");
           $("navInicio").classList.remove("hidden");
           $("navSequences").classList.remove("hidden");
+          $("navPairWatch").classList.remove("hidden");
           $("navBroker").classList.remove("hidden");
           $("navSettings").classList.remove("hidden");
           $("btnExitSidebar").classList.remove("hidden");
@@ -2448,10 +2503,10 @@
           $("navLogin").classList.remove("hidden");
           $("navInicio").classList.add("hidden");
           $("navSequences").classList.add("hidden");
+          $("navPairWatch").classList.add("hidden");
           $("navBroker").classList.add("hidden");
           $("navSettings").classList.add("hidden");
           $("btnExitSidebar").classList.add("hidden");
-          $("pairWatchSidebar").classList.add("hidden");
           if (currentActivePage !== "loginPage") showLogin();
           return;
         }
@@ -2509,7 +2564,7 @@
         updateBotActionButtons(data);
         renderHistoricalTrades(data.results || []);
         renderManualAgendas(data.manual_entries || []);
-        renderPairWatchSidebar(data.pair_watch || {});
+        renderPairWatchPage(data.pair_watch || {});
 
         // --- STATE MACHINE FLOW (Radar vs Entry vs Result) ---
         if (lastTradeCount === null) {
@@ -2643,9 +2698,12 @@
       if (upper.includes("MA21") && upper.includes("CALL")) return "CALL MA21 33s";
       if (upper.includes("MA21") && upper.includes("PUT")) return "PUT MA21 33s";
       if (upper.includes("COMPRA NO 33")) return "Compra 33s";
+      if (upper.includes("ESTRATEGIA 01") || upper.includes("ESTRATÉGIA 01")) return "Estrategia 01";
+      if (upper.includes("ESTRATEGIA 04") || upper.includes("ESTRATÉGIA 04")) return "Estrategia 04";
+      if (upper.includes("ESTRATEGIA 05") || upper.includes("ESTRATÉGIA 05")) return "Estrategia 05";
+      if (upper.includes("ESTRATEGIA 03") || upper.includes("ESTRATÉGIA 03")) return "Estrategia 03";
       if (upper.includes("REVERS")) return "Reversao";
       if (upper.includes("CONTINUA")) return "Continuacao";
-      if (upper.includes("8 CANDLES")) return "8 candles";
       return raw.length > 28 ? `${raw.slice(0, 25)}...` : raw;
     }
 
@@ -2736,15 +2794,8 @@
       }).join("");
     }
 
-    function renderPairWatchSidebar(pairWatch) {
-      const widget = $("pairWatchSidebar");
-      if (!widget) return;
-      if (!connected) {
-        widget.classList.add("hidden");
-        return;
-      }
-
-      widget.classList.remove("hidden");
+    function renderPairWatchPage(pairWatch) {
+      if (!$("pairWatchRows")) return;
       $("pairWatchRespected").textContent = pairWatch.respected ?? 0;
       $("pairWatchEntries").textContent = pairWatch.entries ?? 0;
 

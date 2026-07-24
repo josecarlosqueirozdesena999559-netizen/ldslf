@@ -226,7 +226,7 @@ class TerminalUI:
             f"Stop loss: {settings.stop_loss:.2f}\n"
             f"Timeframe: {settings.timeframe}\n"
             f"Payout mínimo: {settings.payout_min}%\n"
-            f"Estratégia: 8 candles; MA21 contra 5/6/7; MA21 compra no 33 com 2 entradas"
+            f"E01: 8V+2R=PUT; E03: 8V+3R=CALL; E04: R G R G=PUT/G1 CALL; E05: G R G R=CALL/G1 PUT"
         )
         return Panel(body, title="Resumo", border_style="white")
 
@@ -279,7 +279,7 @@ class TerminalUI:
         progress = self._candle_progress(current, settings.timeframe)
         movement = current.close - current.open
         freshness = self._tick_freshness(current)
-        signal_text = f"{signal.direction} na próxima vela" if signal else "aguardando 8 candles"
+        signal_text = f"{signal.direction} na próxima vela" if signal else "aguardando Estratégia 01"
         trade_text = current_trade or "Nenhuma operação"
         price_style = "bold white on green" if live_color == "GREEN" else "bold white on red" if live_color == "RED" else "bold black on white"
         body = (
