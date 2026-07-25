@@ -1967,7 +1967,7 @@ HTML = r"""
     :root { color-scheme: dark; --bg:#090d13; --panel:#111923; --panel2:#0c121a; --line:#1a9bd7; --text:#edf7ff; --muted:#8ba6b8; --green:#15c77f; --red:#ef4d45; --yellow:#eac84d; }
     * { box-sizing: border-box; }
     body { margin:0; font-family: Segoe UI, Arial, sans-serif; background:var(--bg); color:var(--text); }
-    header { height:58px; display:flex; align-items:center; justify-content:space-between; padding:0 22px; border-bottom:1px solid #192332; background:#0b1119; position:sticky; top:0; z-index:2; }
+    header { min-height:58px; display:flex; align-items:center; justify-content:space-between; gap:12px; padding:10px 22px; border-bottom:1px solid #192332; background:#0b1119; position:sticky; top:0; z-index:2; }
     h1 { font-size:18px; margin:0; color:#48c8ff; }
     h2 { margin:0 0 14px; font-size:22px; }
     main { max-width:1040px; margin:0 auto; padding:22px; }
@@ -2001,8 +2001,19 @@ HTML = r"""
     .pause { text-align:center; padding:70px 20px; }
     .pause h2 { color:var(--yellow); }
     .topline { display:flex; align-items:center; justify-content:space-between; gap:12px; margin-bottom:14px; }
-    .nav { display:flex; gap:8px; }
+    .nav { display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
     @media (max-width: 820px) { .grid, .menuGrid, .stats { grid-template-columns:1fr; } main { padding:12px; } }
+    @media (max-width: 560px) {
+      header { align-items:flex-start; flex-direction:column; padding:12px; }
+      h1 { font-size:16px; line-height:1.2; }
+      .nav { width:100%; display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:8px; }
+      .nav button { width:100%; min-height:42px; padding:10px 8px; font-size:12px; }
+      .center { margin:24px auto; }
+      .topline { align-items:flex-start; flex-direction:column; gap:6px; }
+      .menuGrid button { width:100%; min-height:46px; }
+      th, td { padding:7px 8px; }
+      table { display:block; overflow-x:auto; }
+    }
   </style>
 </head>
 <body>

@@ -1410,6 +1410,8 @@
         grid-template-columns: 1fr;
       }
       .sidebar {
+        position: sticky;
+        top: 0;
         border-right: none;
         border-bottom: 1px solid var(--panel-border);
         flex-direction: row;
@@ -1417,6 +1419,8 @@
         justify-content: space-between;
         padding: 15px 20px;
         gap: 15px;
+        background: rgba(8, 8, 11, 0.96);
+        backdrop-filter: blur(12px);
       }
       .brand {
         font-size: 14px;
@@ -1424,11 +1428,21 @@
       .nav-links {
         flex-direction: row;
         gap: 8px;
+        overflow-x: auto;
+        padding-bottom: 4px;
+        scrollbar-width: none;
+      }
+      .nav-links::-webkit-scrollbar {
+        display: none;
+      }
+      .nav-links li {
+        flex: 0 0 auto;
       }
       .nav-btn {
         padding: 8px 12px;
         font-size: 13px;
         border-radius: 8px;
+        white-space: nowrap;
       }
       .nav-btn i {
         font-size: 15px;
@@ -1506,13 +1520,37 @@
 
     @media (max-width: 650px) {
       .sidebar {
-        flex-direction: column;
-        align-items: stretch;
+        padding: 10px 12px;
+        gap: 10px;
+      }
+      .sidebar .brand {
+        min-width: 120px;
+      }
+      .sidebar .brand div:first-child span {
+        font-size: 9px !important;
+        letter-spacing: 1.4px !important;
+      }
+      .sidebar .brand div:last-child {
+        font-size: 12px !important;
+        margin-left: 24px !important;
+        white-space: nowrap;
+      }
+      .sidebar nav {
+        min-width: 0;
+        overflow: hidden;
       }
       .nav-links {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
+        display: flex;
         width: 100%;
+      }
+      .nav-btn {
+        min-height: 40px;
+        padding: 8px 10px;
+        font-size: 12px;
+        gap: 7px;
+      }
+      .nav-btn i {
+        font-size: 14px;
       }
       .settings-grid, .manual-entry-form-row {
         grid-template-columns: 1fr;
