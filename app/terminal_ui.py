@@ -228,7 +228,7 @@ class TerminalUI:
             f"Stop loss: {settings.stop_loss:.2f}\n"
             f"Timeframe: {settings.timeframe}\n"
             f"Payout mínimo: {settings.payout_min}%\n"
-            f"E01: 8V+2R=PUT/G2; E03: 8V+3R=CALL/G1; E04: G R G R=CALL sem gale; E05: R G R G=PUT sem gale"
+            f"E01: 8V+2R=PUT/G2; E03: 8V+3R=CALL/G1; E04 termina R=CALL sem gale; E05 termina G=PUT sem gale"
         )
         return Panel(body, title="Resumo", border_style="white")
 

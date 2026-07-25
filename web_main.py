@@ -1575,7 +1575,7 @@ class WebBot:
             "settings_saved": self.settings_saved,
             "account": self.last_account,
             "strategy": "Estrategia 01",
-            "strategy_detail": "Estrategias analisadas sem ordem fixa. 8 candles seguidos + reversao com 2 candles contrarios: entrada contra a tendencia com entrada, G1 e G2. 8 verdes seguidos + 9o candle vermelho + mais 2 vermelhos: entrada CALL com G1 se der loss. Estrategia 04: verde, vermelho, verde e vermelho: proxima vela precisa terminar verde, CALL sem reentrada. Estrategia 05: vermelho, verde, vermelho e verde: proxima vela precisa terminar vermelha, PUT sem reentrada. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde rompe a MA21, termina acima depois de 33s, com apenas 1 ou 2 verdes antes, entrada + G1. Venda no 33: vermelho rompe a MA21 para baixo, termina abaixo depois de 33s, com apenas 1 ou 2 vermelhos antes, entrada PUT + G1. CALL 33 MA21: candle verde rompe a MA21 para cima; candle seguinte fica negativo aos 33s e fecha verde positivo, CALL com entrada + G1. PUT 33 MA21: candle vermelho rompe a MA21 para baixo; candle seguinte fica verde aos 33s e fecha vermelho negativo, PUT com entrada + G1. Pares 18min: 18+ minutos sem 2 candles iguais; nasceu verde CALL, nasceu vermelho PUT.",
+            "strategy_detail": "Estrategias analisadas sem ordem fixa. 8 candles seguidos + reversao com 2 candles contrarios: entrada contra a tendencia com entrada, G1 e G2. 8 verdes seguidos + 9o candle vermelho + mais 2 vermelhos: entrada CALL com G1 se der loss. Estrategia 04: verde, vermelho, verde e vermelho; ultimo candle terminou vermelho, CALL compra sem reentrada. Estrategia 05: vermelho, verde, vermelho e verde; ultimo candle terminou verde, PUT venda sem reentrada. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde rompe a MA21, termina acima depois de 33s, com apenas 1 ou 2 verdes antes, entrada + G1. Venda no 33: vermelho rompe a MA21 para baixo, termina abaixo depois de 33s, com apenas 1 ou 2 vermelhos antes, entrada PUT + G1. CALL 33 MA21: candle verde rompe a MA21 para cima; candle seguinte fica negativo aos 33s e fecha verde positivo, CALL com entrada + G1. PUT 33 MA21: candle vermelho rompe a MA21 para baixo; candle seguinte fica verde aos 33s e fecha vermelho negativo, PUT com entrada + G1. Pares 18min: 18+ minutos sem 2 candles iguais; nasceu verde CALL, nasceu vermelho PUT.",
             "strategy_moment": strategy_moment["title"],
             "strategy_moment_detail": strategy_moment["detail"],
             "target_sequence": self.active_strategy,
@@ -2214,7 +2214,7 @@ HTML = r"""
       $("pausePanel").classList.add("hidden");
       $("analysisPanel").classList.remove("hidden");
       $("asset").textContent = data.asset || "Aguardando ativo";
-      $("sequence").textContent = `EstratÃ©gia do momento: ${data.strategy || "Estrategia 01"} - E04 G/R/G/R CALL sem gale, E05 R/G/R/G PUT sem gale, estrategia 01/03, MA21 ou pares 18min`;
+      $("sequence").textContent = `EstratÃ©gia do momento: ${data.strategy || "Estrategia 01"} - E04 termina vermelho CALL, E05 termina verde PUT, estrategia 01/03, MA21 ou pares 18min`;
       $("signal").textContent = data.signal ? `Sinal: ${data.signal.direction} (${data.signal.pattern})` : "Sinal: aguardando estrategia";
       const last = data.candles[data.candles.length - 1];
       if (last) {

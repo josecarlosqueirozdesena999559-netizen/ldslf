@@ -117,7 +117,9 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
 
         self.assertIsNotNone(signal)
         self.assertEqual(signal.direction, "CALL")
+        self.assertEqual(signal.sequence_color, "RED")
         self.assertEqual(signal.max_entries, 1)
+        self.assertIn("ultimo candle terminou vermelho", signal.pattern)
         self.assertIn("Estrategia 04", signal.pattern)
         self.assertEqual(TradeExecutor.direction_for_step(signal, 0), "CALL")
 
@@ -126,7 +128,9 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
 
         self.assertIsNotNone(signal)
         self.assertEqual(signal.direction, "PUT")
+        self.assertEqual(signal.sequence_color, "GREEN")
         self.assertEqual(signal.max_entries, 1)
+        self.assertIn("ultimo candle terminou verde", signal.pattern)
         self.assertIn("Estrategia 05", signal.pattern)
         self.assertEqual(TradeExecutor.direction_for_step(signal, 0), "PUT")
 

@@ -360,8 +360,8 @@ def detect_strategy_04_green_red_green_red(asset: Asset) -> tuple[str | None, st
         return None, "Estrategia 04 aguarda verde, vermelho, verde, vermelho", colors[-1] if colors else None
 
     pattern = (
-        "Estrategia 04: nasceu verde, vermelho, verde e vermelho; "
-        "proxima vela precisa terminar verde; compra CALL sem reentrada"
+        "Estrategia 04: verde, vermelho, verde e vermelho; "
+        "ultimo candle terminou vermelho; compra CALL sem reentrada"
     )
     return "CALL", pattern, "RED"
 
@@ -376,8 +376,8 @@ def detect_strategy_05_red_green_red_green(asset: Asset) -> tuple[str | None, st
         return None, "Estrategia 05 aguarda vermelho, verde, vermelho, verde", colors[-1] if colors else None
 
     pattern = (
-        "Estrategia 05: nasceu vermelho, verde, vermelho e verde; "
-        "proxima vela precisa terminar vermelha; venda PUT sem reentrada"
+        "Estrategia 05: vermelho, verde, vermelho e verde; "
+        "ultimo candle terminou verde; venda PUT sem reentrada"
     )
     return "PUT", pattern, "GREEN"
 
