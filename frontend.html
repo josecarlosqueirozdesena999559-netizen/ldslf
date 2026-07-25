@@ -886,7 +886,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: 420px;
+      min-height: 280px;
       width: 100%;
       animation: zoomIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
@@ -897,60 +897,60 @@
     }
 
     .result-icon-wrap {
-      width: 90px;
-      height: 90px;
+      width: 64px;
+      height: 64px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 40px;
-      margin-bottom: 25px;
-      box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+      font-size: 26px;
+      margin-bottom: 12px;
+      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
     }
 
     .result-overlay-panel.win .result-icon-wrap {
       background: var(--green-glow);
       color: var(--green);
       border: 2px solid var(--green);
-      box-shadow: 0 0 25px var(--green-glow);
+      box-shadow: 0 0 15px var(--green-glow);
     }
 
     .result-overlay-panel.loss .result-icon-wrap {
       background: rgba(255, 102, 0, 0.08);
       color: var(--accent);
       border: 2px solid var(--accent);
-      box-shadow: 0 0 25px var(--accent-glow);
+      box-shadow: 0 0 15px var(--accent-glow);
     }
 
     .result-header-text {
       font-family: var(--font-title);
-      font-size: 38px;
+      font-size: 24px;
       font-weight: 800;
       letter-spacing: -0.5px;
-      margin-bottom: 8px;
+      margin-bottom: 6px;
     }
 
     .result-overlay-panel.win .result-header-text {
       color: var(--green);
-      text-shadow: 0 0 15px rgba(0, 230, 118, 0.3);
+      text-shadow: 0 0 10px rgba(0, 230, 118, 0.2);
     }
 
     .result-overlay-panel.loss .result-header-text {
       color: var(--accent);
-      text-shadow: 0 0 15px rgba(255, 102, 0, 0.3);
+      text-shadow: 0 0 10px rgba(255, 102, 0, 0.2);
     }
 
     .result-sub-text {
       font-family: var(--font-title);
-      font-size: 18px;
+      font-size: 14px;
       font-weight: 600;
       color: var(--text-muted);
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
 
     .result-profit-text {
       font-family: var(--font-title);
-      font-size: 24px;
+      font-size: 18px;
       font-weight: 700;
     }
 
@@ -2565,9 +2565,18 @@
         // Apply filters initially
         applyResultsFilters();
 
-        // 2. Render Charts
-        renderProfitEvolutionChart(data.balance_evolution || []);
-        renderOpsByHourChart(data.ops_by_hour || []);
+        // 2. Render Charts (wrapped defensively)
+        try {
+          renderProfitEvolutionChart(data.balance_evolution || []);
+        } catch (chartErr) {
+          console.error("Erro ao carregar grafico de evolucao do saldo:", chartErr);
+        }
+
+        try {
+          renderOpsByHourChart(data.ops_by_hour || []);
+        } catch (chartErr) {
+          console.error("Erro ao carregar grafico de operacoes por hora:", chartErr);
+        }
 
         // 3. Render Best & Worst Strategies lists
         renderStrategiesRanking(data.strategies_best || [], data.strategies_worst || []);
@@ -2779,7 +2788,7 @@
         if (assetVal !== "ALL" && trade.asset !== assetVal) return false;
         
         if (strategyVal !== "ALL") {
-          const pattern = trade.motivo || trade.pattern || "8 Velas Consecutivas";
+          const pattern = String(trade.motivo || trade.pattern || "8 Velas Consecutivas");
           const pattern_lower = pattern.toLowerCase();
           
           let tradeStrat = "";
@@ -2792,13 +2801,14 @@
           if (tradeStrat !== strategyVal) return false;
         }
 
-        if (typeVal !== "ALL" && trade.direction !== typeVal) return false;
+        const dir = trade.direction || trade.position || "CALL";
+        if (typeVal !== "ALL" && dir !== typeVal) return false;
         if (outcomeVal !== "ALL" && trade.result !== outcomeVal) return false;
 
         if (searchVal) {
           const assetName = (trade.asset || "").toLowerCase();
           const timestamp = (trade.timestamp || "").toLowerCase();
-          const motivo = (trade.motivo || trade.pattern || "").toLowerCase();
+          const motivo = String(trade.motivo || trade.pattern || "").toLowerCase();
           if (!assetName.includes(searchVal) && !timestamp.includes(searchVal) && !motivo.includes(searchVal)) {
             return false;
           }
@@ -2835,12 +2845,13 @@
 
       container.innerHTML = paginatedData.map(row => {
         const isWin = row.result === "WIN";
-        const dirCls = row.direction === "CALL" ? "call" : "put";
-        const dirLbl = row.direction === "CALL" ? "COMPRA" : "VENDA";
-        const dirIcon = row.direction === "CALL" ? "fa-arrow-up" : "fa-arrow-down";
+        const dir = row.direction || row.position || "CALL";
+        const dirCls = dir === "CALL" ? "call" : "put";
+        const dirLbl = dir === "CALL" ? "COMPRA" : "VENDA";
+        const dirIcon = dir === "CALL" ? "fa-arrow-up" : "fa-arrow-down";
         const profit = Number(row.profit || 0);
 
-        const pattern = row.motivo || row.pattern || "8 Velas Consecutivas";
+        const pattern = String(row.motivo || row.pattern || "8 Velas Consecutivas");
         const pattern_lower = pattern.toLowerCase();
         let displayStrat = "Estratégia 01";
         if (pattern_lower.includes("8 velas") || pattern_lower.includes("8 candles")) displayStrat = "Estratégia 01";
@@ -2851,7 +2862,7 @@
 
         return `
           <tr>
-            <td style="font-family: monospace; font-size:12px;">${row.timestamp || "-"}</td>
+            <td style="font-family: monospace; font-size:12px;">${row.timestamp || row.time || "-"}</td>
             <td><strong>${row.asset ? formatAssetName(row.asset) : "-"}</strong></td>
             <td>
               <span class="badge-dir ${dirCls}" style="display:flex; align-items:center; justify-content:center; gap:4px; width:75px; height:24px; font-weight:700;">

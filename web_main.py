@@ -1944,12 +1944,33 @@ def api_history_stats():
     
     # 1. Net Profit Evolution (Daily profit)
     daily_profits = {}
+    from datetime import datetime
     for trade in trades:
         ts = trade.get("timestamp")
         if not ts:
             continue
-        date_str = ts.split(" ")[0] # YYYY-MM-DD
-        profit = float(trade.get("profit") or 0)
+        # Support both YYYY-MM-DD and DD/MM/YYYY formats
+        date_str = ts.split(" ")[0]
+        if "/" in date_str:
+            # DD/MM/YYYY -> YYYY-MM-DD
+            try:
+                parts = date_str.split("/")
+                if len(parts) == 3:
+                    date_str = f"{parts[2]}-{parts[1]}-{parts[0]}"
+            except Exception:
+                pass
+        
+        profit_val = trade.get("profit")
+        if profit_val is None:
+            profit = 0.0
+        elif isinstance(profit_val, (int, float)):
+            profit = float(profit_val)
+        else:
+            try:
+                profit_str = str(profit_val).replace("R$", "").replace("+", "").replace(" ", "").strip()
+                profit = float(profit_str)
+            except ValueError:
+                profit = 0.0
         daily_profits[date_str] = daily_profits.get(date_str, 0.0) + profit
         
     # Get sorted list of dates
@@ -1962,8 +1983,16 @@ def api_history_stats():
     cumulative = 0.0
     for d in recent_dates:
         cumulative += daily_profits[d]
+        # format date label for chart (DD/MM)
+        date_label = d
+        try:
+            parts = d.split("-")
+            if len(parts) == 3:
+                date_label = f"{parts[2]}/{parts[1]}"
+        except Exception:
+            pass
         balance_evolution.append({
-            "date": "/".join(d.split("-")[1:3][::-1]), # DD/MM
+            "date": date_label,
             "profit": round(daily_profits[d], 2),
             "cumulative": round(cumulative, 2)
         })
@@ -1972,6 +2001,7 @@ def api_history_stats():
     strategy_groups = {}
     for trade in trades:
         pattern = trade.get("motivo") or trade.get("pattern") or "8 Velas Consecutivas"
+        pattern = str(pattern)
         pattern_lower = pattern.lower()
         if "8 velas" in pattern_lower or "8 candles" in pattern_lower:
             pattern = "Estratégia 01"
@@ -2017,14 +2047,24 @@ def api_history_stats():
     # 3. Heatmap (Weekday vs 2-Hour block)
     heatmap_grid = {wd: {h: {"wins": 0, "total": 0} for h in range(12)} for wd in range(7)}
     
-    from datetime import datetime
     for trade in trades:
         ts = trade.get("timestamp")
         result = trade.get("result")
         if not ts or result not in {"WIN", "LOSS"}:
             continue
+        
+        # Support multiple timestamp formats
+        dt = None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S"):
+            try:
+                dt = datetime.strptime(ts, fmt)
+                break
+            except ValueError:
+                continue
+        if not dt:
+            continue
+            
         try:
-            dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
             wd = dt.weekday() # 0-6
             hour = dt.hour # 0-23
             block = hour // 2 # 0-11
@@ -2053,8 +2093,17 @@ def api_history_stats():
         ts = trade.get("timestamp")
         if not ts:
             continue
+        dt = None
+        for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S"):
+            try:
+                dt = datetime.strptime(ts, fmt)
+                break
+            except ValueError:
+                continue
+        if not dt:
+            continue
+            
         try:
-            dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
             ops_by_hour[dt.hour] += 1
         except Exception:
             continue
