@@ -205,6 +205,7 @@ class WebBot:
         self.operation_open = False
         self.used_signal_keys: set[tuple] = set()
         self.asset_signal_cooldowns: dict[str, int] = {}
+        self.asset_strategy_cooldowns: dict[str, set[str]] = {}
         self.negative_at_33_marks: set[tuple[str, int]] = set()
         self.positive_at_33_marks: set[tuple[str, int]] = set()
         self.last_payout_update = 0.0
@@ -443,6 +444,10 @@ class WebBot:
                 continue
             signal = generate_signal(asset)
             if not signal:
+                self.clear_strategy_cooldown(asset)
+                continue
+            self.release_inactive_strategy_cooldowns(asset, signal)
+            if self.is_strategy_in_cooldown(asset, signal):
                 continue
             if self.is_asset_in_signal_cooldown(asset):
                 continue
@@ -573,8 +578,14 @@ class WebBot:
             if asset.open and asset.payout >= self.settings.payout_min:
                 signal = generate_signal(asset)
                 if signal:
+                    self.release_inactive_strategy_cooldowns(asset, signal)
+                    if self.is_strategy_in_cooldown(asset, signal):
+                        continue
                     if self.is_asset_in_signal_cooldown(asset):
                         continue
+                else:
+                    self.clear_strategy_cooldown(asset)
+                if signal:
                     key = self.signal_key(asset, signal)
                     if key in self.used_signal_keys:
                         continue
@@ -756,6 +767,7 @@ class WebBot:
                 return
             if trade:
                 self.mark_asset_signal_cooldown(signal)
+                self.mark_strategy_cooldown(signal)
                 self.add_session_cycle([trade], pattern=signal.pattern)
                 if trade.result == "WIN":
                     self.last_green_time = bullex_now().strftime("%H:%M:%S")
@@ -782,12 +794,14 @@ class WebBot:
             cycle_trades = self.executor.last_cycle_trades if self.executor else []
             if trade and trade.result == "WIN":
                 self.mark_asset_signal_cooldown(signal)
+                self.mark_strategy_cooldown(signal)
                 self.add_session_cycle(cycle_trades or [trade], pattern=signal.pattern)
                 self.last_green_time = bullex_now().strftime("%H:%M:%S")
                 self.save_session_score()
                 self.finish_cycle_after_trade()
             elif trade:
                 self.mark_asset_signal_cooldown(signal)
+                self.mark_strategy_cooldown(signal)
                 self.add_session_cycle(cycle_trades or [trade], pattern=signal.pattern)
                 self.finish_cycle_after_trade()
             else:
@@ -822,6 +836,7 @@ class WebBot:
         self.session_results = []
         self.used_signal_keys = set()
         self.asset_signal_cooldowns = {}
+        self.asset_strategy_cooldowns = {}
         self.pair_watch_states = {}
         self.pair_watch_respected = 0
         self.pair_watch_entries = 0
@@ -1402,6 +1417,46 @@ class WebBot:
         closed = [candle for candle in asset.candles if candle.closed]
         if closed:
             self.asset_signal_cooldowns[asset.name] = int(closed[-1].timestamp)
+
+    def is_strategy_in_cooldown(self, asset: Asset, signal: Signal) -> bool:
+        return self.signal_family(signal) in self.asset_strategy_cooldowns.get(asset.name, set())
+
+    def mark_strategy_cooldown(self, signal: Signal) -> None:
+        family = self.signal_family(signal)
+        if family:
+            self.asset_strategy_cooldowns.setdefault(signal.asset, set()).add(family)
+
+    def clear_strategy_cooldown(self, asset: Asset) -> None:
+        self.asset_strategy_cooldowns.pop(asset.name, None)
+
+    def release_inactive_strategy_cooldowns(self, asset: Asset, signal: Signal) -> None:
+        family = self.signal_family(signal)
+        cooldowns = self.asset_strategy_cooldowns.get(asset.name)
+        if cooldowns and family not in cooldowns:
+            self.asset_strategy_cooldowns.pop(asset.name, None)
+
+    @staticmethod
+    def signal_family(signal: Signal) -> str:
+        pattern = (signal.pattern or "").lower()
+        if "estrategia 01" in pattern:
+            return "estrategia 01"
+        if "estrategia 03" in pattern:
+            return "estrategia 03"
+        if "estrategia 05" in pattern:
+            return "estrategia 05"
+        if "velas 5, 6 e 7" in pattern:
+            return "ma21 wickless"
+        if "comprar no segundo 33" in pattern:
+            return "ma21 call 33"
+        if "operar vendido no segundo 33" in pattern:
+            return "ma21 put 33"
+        if "negativo aos 33s" in pattern:
+            return "ma21 negative 33"
+        if "verde aos 33s" in pattern:
+            return "ma21 positive 33"
+        if "minutos sem 2 candles iguais" in pattern:
+            return "pares atrasados"
+        return pattern
 
     @staticmethod
     def format_seconds(seconds: int) -> str:

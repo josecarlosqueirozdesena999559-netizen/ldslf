@@ -122,7 +122,7 @@ class TradeExecutor:
             ok, order_id = self.client.buy(signal.asset, platform_direction, value, duration)
             if not ok:
                 self.logger.info("[TRADE] falha ao abrir ordem: %s", order_id)
-                self.current_trade = "Aguardando outro sinal"
+                self.current_trade = f"Falha ao abrir ordem: {order_id}"
                 return last_trade
             self.current_trade = (
                 f"ORDEM CONFIRMADA {direction} {signal.asset} {attempt_name(step)} "
@@ -203,7 +203,7 @@ class TradeExecutor:
         ok, order_id = self.client.buy(signal.asset, platform_direction, value, duration)
         if not ok:
             self.logger.info("[TRADE] falha ao abrir entrada única: %s", order_id)
-            self.current_trade = "Aguardando outro sinal"
+            self.current_trade = f"Falha ao abrir ordem: {order_id}"
             return None
 
         result, profit = self.wait_result(order_id)

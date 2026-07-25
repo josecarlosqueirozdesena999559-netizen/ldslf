@@ -52,6 +52,7 @@ class RobotEngine:
         self.operation_lock = threading.Lock()
         self.used_signal_keys: set[tuple] = set()
         self.asset_signal_cooldowns: dict[str, int] = {}
+        self.asset_strategy_cooldowns: dict[str, set[str]] = {}
         self.negative_at_33_marks: set[tuple[str, int]] = set()
         self.positive_at_33_marks: set[tuple[str, int]] = set()
         self.trade_thread: threading.Thread | None = None
@@ -138,6 +139,10 @@ class RobotEngine:
                 continue
             signal = generate_signal(asset)
             if not signal:
+                self.clear_strategy_cooldown(asset)
+                continue
+            self.release_inactive_strategy_cooldowns(asset, signal)
+            if self.is_strategy_in_cooldown(asset, signal):
                 continue
             if self.is_asset_in_signal_cooldown(asset):
                 continue
@@ -223,8 +228,14 @@ class RobotEngine:
                 continue
             signal = generate_signal(asset)
             if signal:
+                self.release_inactive_strategy_cooldowns(asset, signal)
+                if self.is_strategy_in_cooldown(asset, signal):
+                    continue
                 if self.is_asset_in_signal_cooldown(asset):
                     continue
+            else:
+                self.clear_strategy_cooldown(asset)
+            if signal:
                 key = self.signal_key(asset, signal)
                 if key in self.used_signal_keys:
                     continue
@@ -456,6 +467,7 @@ class RobotEngine:
                 self.last_green_time = time.strftime("%H:%M:%S")
             if trade:
                 self.mark_asset_signal_cooldown(signal)
+                self.mark_strategy_cooldown(signal)
             self.reset_scan_timer()
             self.state.status = "Escaneando ativos em tempo real / aguardando sinal"
         finally:
@@ -499,6 +511,46 @@ class RobotEngine:
         closed = [candle for candle in asset.candles if candle.closed]
         if closed:
             self.asset_signal_cooldowns[asset.name] = int(closed[-1].timestamp)
+
+    def is_strategy_in_cooldown(self, asset, signal: Signal) -> bool:
+        return self.signal_family(signal) in self.asset_strategy_cooldowns.get(asset.name, set())
+
+    def mark_strategy_cooldown(self, signal: Signal) -> None:
+        family = self.signal_family(signal)
+        if family:
+            self.asset_strategy_cooldowns.setdefault(signal.asset, set()).add(family)
+
+    def clear_strategy_cooldown(self, asset) -> None:
+        self.asset_strategy_cooldowns.pop(asset.name, None)
+
+    def release_inactive_strategy_cooldowns(self, asset, signal: Signal) -> None:
+        family = self.signal_family(signal)
+        cooldowns = self.asset_strategy_cooldowns.get(asset.name)
+        if cooldowns and family not in cooldowns:
+            self.asset_strategy_cooldowns.pop(asset.name, None)
+
+    @staticmethod
+    def signal_family(signal: Signal) -> str:
+        pattern = (signal.pattern or "").lower()
+        if "estrategia 01" in pattern:
+            return "estrategia 01"
+        if "estrategia 03" in pattern:
+            return "estrategia 03"
+        if "estrategia 05" in pattern:
+            return "estrategia 05"
+        if "velas 5, 6 e 7" in pattern:
+            return "ma21 wickless"
+        if "comprar no segundo 33" in pattern:
+            return "ma21 call 33"
+        if "operar vendido no segundo 33" in pattern:
+            return "ma21 put 33"
+        if "negativo aos 33s" in pattern:
+            return "ma21 negative 33"
+        if "verde aos 33s" in pattern:
+            return "ma21 positive 33"
+        if "minutos sem 2 candles iguais" in pattern:
+            return "pares atrasados"
+        return pattern
 
     @staticmethod
     def strategy_priority(signal: Signal) -> int:

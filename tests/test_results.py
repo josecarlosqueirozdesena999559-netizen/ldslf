@@ -1,9 +1,11 @@
 import unittest
+import threading
 from unittest.mock import patch
 
 from models.settings import BotSettings
 from models.trade import TradeResult
 from robot.executor import TradeExecutor
+from robot.engine import RobotEngine
 from web_main import WebBot
 
 
@@ -56,6 +58,7 @@ class ResultAccountingTests(unittest.TestCase):
         executor = object.__new__(TradeExecutor)
         executor.logger = DummyLogger()
         executor.current_trade = ""
+        executor._operation_lock = threading.Lock()
 
         with patch("robot.executor.time.time", return_value=70), patch.object(executor, "sleep_until") as sleep_until:
             allowed = executor.ensure_candle_open_entry(BotSettings(timeframe="M1"))
@@ -73,6 +76,61 @@ class ResultAccountingTests(unittest.TestCase):
             allowed = executor.ensure_candle_open_entry(BotSettings(timeframe="M1"))
 
         self.assertTrue(allowed)
+
+    def test_failed_buy_keeps_reason_visible(self) -> None:
+        executor = object.__new__(TradeExecutor)
+        executor.logger = DummyLogger()
+        executor.current_trade = ""
+        executor._operation_lock = threading.Lock()
+
+        executor.resolve_robot_order_result = lambda result, profit, order_id: (result, profit)
+        executor.wait_entry_time = lambda signal, settings: True
+        executor.apply_martingale = lambda settings, step: settings.entry_value
+        executor.client = type(
+            "Client",
+            (),
+            {
+                "get_balance": lambda _self: 100.0,
+                "get_balance_mode": lambda _self: "DEMO",
+                "buy": lambda _self, asset, direction, value, duration: (False, "mercado fechado"),
+            },
+        )()
+        executor.risk = type(
+            "Risk",
+            (),
+            {"can_trade": lambda _self, **kwargs: (True, ""), "add_profit": lambda _self, profit: None},
+        )()
+
+        signal = type(
+            "Signal",
+            (),
+            {
+                "asset": "EURUSD",
+                "direction": "CALL",
+                "pattern": "Estrategia 05",
+                "timestamp": __import__("datetime").datetime.now(),
+                "payout": 90,
+                "max_entries": 1,
+            },
+        )()
+
+        self.assertIsNone(executor.execute_cycle(signal, BotSettings(), "DEMO"))
+        self.assertIn("Falha ao abrir ordem", executor.current_trade)
+
+    def test_strategy_cooldown_blocks_same_family_until_signal_changes(self) -> None:
+        engine = object.__new__(RobotEngine)
+        engine.asset_strategy_cooldowns = {}
+        asset = type("Asset", (), {"name": "EURUSD"})()
+        signal = type("Signal", (), {"asset": "EURUSD", "pattern": "comprar no segundo 33 com entrada e G1"})()
+        other_signal = type("Signal", (), {"asset": "EURUSD", "pattern": "Estrategia 05"})()
+
+        engine.mark_strategy_cooldown(signal)
+
+        self.assertTrue(engine.is_strategy_in_cooldown(asset, signal))
+        engine.release_inactive_strategy_cooldowns(asset, signal)
+        self.assertTrue(engine.is_strategy_in_cooldown(asset, signal))
+        engine.release_inactive_strategy_cooldowns(asset, other_signal)
+        self.assertFalse(engine.is_strategy_in_cooldown(asset, signal))
 
 
 if __name__ == "__main__":
