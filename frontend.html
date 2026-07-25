@@ -10,6 +10,8 @@
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
   <!-- Font Awesome Icons -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- Chart.js for Advanced Analytics -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   
   <style>
     :root {
@@ -42,15 +44,16 @@
     body {
       background-color: var(--bg-app);
       color: var(--text);
-      min-height: 100vh;
+      height: 100vh;
+      width: 100vw;
       display: flex;
-      overflow-x: hidden;
+      overflow: hidden;
     }
 
     /* Layout Grid */
     .app-container {
       display: grid;
-      grid-template-columns: 280px 1fr;
+      grid-template-columns: 240px 1fr;
       width: 100%;
       min-height: 100vh;
     }
@@ -59,28 +62,26 @@
     .sidebar {
       background-color: var(--sidebar-bg);
       border-right: 1px solid var(--panel-border);
-      padding: 30px 20px;
+      padding: 25px 16px;
       display: flex;
       flex-direction: column;
-      gap: 35px;
+      gap: 30px;
       z-index: 10;
+      align-items: flex-start;
     }
 
     .brand {
       display: flex;
       align-items: center;
-      gap: 10px;
-      font-family: var(--font-title);
-      font-size: 15px;
-      font-weight: 800;
-      letter-spacing: 1px;
-      text-transform: uppercase;
+      gap: 12px;
+      width: 100%;
+      padding: 10px 8px;
     }
 
     .brand i {
       color: var(--accent);
-      font-size: 20px;
-      filter: drop-shadow(0 0 5px var(--accent));
+      font-size: 26px;
+      filter: drop-shadow(0 0 8px var(--accent));
     }
 
     .brand span {
@@ -90,31 +91,37 @@
     .nav-links {
       display: flex;
       flex-direction: column;
-      gap: 10px;
+      gap: 8px;
       list-style: none;
+      width: 100%;
+      align-items: flex-start;
     }
 
     .nav-btn {
       width: 100%;
+      height: 44px;
+      padding: 0 16px;
       background: transparent;
       border: 1px solid transparent;
-      border-radius: 10px;
-      padding: 14px 16px;
+      border-radius: 8px;
       color: var(--text-muted);
-      text-align: left;
-      font-family: var(--font-title);
-      font-size: 15px;
-      font-weight: 600;
       cursor: pointer;
       display: flex;
       align-items: center;
       gap: 12px;
+      font-family: var(--font-title);
+      font-size: 14px;
+      font-weight: 500;
       transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      text-decoration: none;
+      white-space: nowrap;
     }
 
     .nav-btn i {
-      font-size: 18px;
-      transition: transform 0.3s ease;
+      font-size: 16px;
+      width: 20px;
+      text-align: center;
+      transition: all 0.3s ease;
     }
 
     .nav-btn:hover {
@@ -124,16 +131,21 @@
     }
 
     .nav-btn:hover i {
-      transform: translateX(3px);
+      transform: scale(1.1);
+      color: var(--accent);
     }
 
     .nav-btn.active {
+      color: #fff;
+      background: rgba(255, 102, 0, 0.08);
+      border: 1px solid rgba(255, 102, 0, 0.25);
+      box-shadow: 0 0 10px rgba(255, 102, 0, 0.1);
+      font-weight: 600;
+    }
+
+    .nav-btn.active i {
       color: var(--accent);
-      background: linear-gradient(90deg, rgba(255, 102, 0, 0.1) 0%, rgba(255, 102, 0, 0) 100%);
-      border-left: 3px solid var(--accent);
-      border-top-left-radius: 0;
-      border-bottom-left-radius: 0;
-      padding-left: 13px;
+      filter: drop-shadow(0 0 4px var(--accent));
     }
 
     .system-status-widget {
@@ -624,8 +636,8 @@
 
     .radar-wrapper {
       position: relative;
-      width: 230px;
-      height: 230px;
+      width: 200px;
+      height: 200px;
       max-width: 100%;
       margin: 4px auto;
       border-radius: 50%;
@@ -1439,13 +1451,17 @@
         flex: 0 0 auto;
       }
       .nav-btn {
-        padding: 8px 12px;
-        font-size: 13px;
+        width: 42px;
+        height: 42px;
+        padding: 0;
+        justify-content: center;
         border-radius: 8px;
-        white-space: nowrap;
+      }
+      .nav-btn span {
+        display: none;
       }
       .nav-btn i {
-        font-size: 15px;
+        font-size: 16px;
       }
       .system-status-widget {
         display: none;
@@ -1576,6 +1592,31 @@
       .data-table {
         min-width: 720px;
       }
+      .results-grid-3 {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr;
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+      .results-grid-2 {
+        display: grid;
+        grid-template-columns: 3fr 2fr;
+        gap: 20px;
+        margin-bottom: 20px;
+      }
+      @media (max-width: 1024px) {
+        .results-grid-3 {
+          grid-template-columns: 1fr 1fr;
+        }
+        .results-grid-2 {
+          grid-template-columns: 1fr;
+        }
+      }
+      @media (max-width: 768px) {
+        .results-grid-3 {
+          grid-template-columns: 1fr;
+        }
+      }
     }
   </style>
 </head>
@@ -1583,58 +1624,64 @@
   <div class="app-container">
     <!-- Sidebar -->
     <aside class="sidebar">
-      <div class="brand" style="flex-direction: column; align-items: flex-start; gap: 2px;">
-        <div style="display: flex; align-items: center; gap: 8px;">
-          <i class="fa-solid fa-crosshairs"></i>
-          <span style="font-size: 11px; font-weight: 600; letter-spacing: 2px; color: var(--text-muted);">ANDERSON</span>
+      <div class="brand" style="display: flex; align-items: center; gap: 10px; padding: 10px 5px; width: 100%;">
+        <i class="fa-solid fa-crosshairs" style="color: var(--accent); font-size: 26px; filter: drop-shadow(0 0 8px var(--accent));"></i>
+        <div style="display: flex; flex-direction: column; line-height: 1.1;">
+          <span style="font-size: 10px; font-weight: 500; letter-spacing: 2px; color: var(--text-muted);">ANDERSON</span>
+          <span style="font-size: 14px; font-weight: 800; letter-spacing: 0.5px; color: #fff;">ANÁLISES <span style="color: var(--accent);">TRADER</span></span>
         </div>
-        <div style="font-size: 15px; font-weight: 800; letter-spacing: 0.5px; color: #fff; margin-left: 26px;">ANÁLISES <span style="color: var(--accent);">TRADER</span></div>
       </div>
       
-      <nav style="flex-grow: 1;">
+      <nav style="flex-grow: 1; width: 100%;">
         <ul class="nav-links">
           <li>
-            <button id="navLogin" class="nav-btn active" onclick="showLogin()">
-              <i class="fa-solid fa-right-to-bracket"></i> Login
+            <button id="navLogin" class="nav-btn active" onclick="showLogin()" title="Login">
+              <i class="fa-solid fa-right-to-bracket"></i> <span>Login</span>
             </button>
           </li>
           <li>
-            <button id="navInicio" class="nav-btn hidden" onclick="showInicioPage()">
-              <i class="fa-solid fa-house-chimney"></i> Início
+            <button id="navInicio" class="nav-btn hidden" onclick="showInicioPage()" title="Início">
+              <i class="fa-solid fa-house-chimney"></i> <span>Início</span>
             </button>
           </li>
           <li>
-            <button id="navSequences" class="nav-btn hidden" onclick="showSequencesPage()">
-              <i class="fa-solid fa-clock-rotate-left"></i> Ativos por Hora
+            <button id="navSequences" class="nav-btn hidden" onclick="showSequencesPage()" title="Ativos por Hora">
+              <i class="fa-solid fa-clock-rotate-left"></i> <span>Ativos por Hora</span>
             </button>
           </li>
           <li>
-            <button id="navPairWatch" class="nav-btn hidden" onclick="showPairWatchPage()">
-              <i class="fa-solid fa-layer-group"></i> Pares 18min
+            <button id="navPairWatch" class="nav-btn hidden" onclick="showPairWatchPage()" title="Pares 18min">
+              <i class="fa-solid fa-layer-group"></i> <span>Pares 18min</span>
             </button>
           </li>
           <li>
-            <button id="navBroker" class="nav-btn hidden" onclick="showBrokerPage()">
-              <i class="fa-solid fa-chart-line"></i> BullEx Ao Vivo
+            <button id="navBroker" class="nav-btn hidden" onclick="showBrokerPage()" title="BullEx Ao Vivo">
+              <i class="fa-solid fa-chart-line"></i> <span>BullEx Ao Vivo</span>
             </button>
           </li>
           <li>
-            <button id="navSettings" class="nav-btn hidden" onclick="showSettingsPage()">
-              <i class="fa-solid fa-sliders"></i> Configurações
+            <button id="navResultados" class="nav-btn hidden" onclick="showResultadosPage()" title="Resultados">
+              <i class="fa-solid fa-chart-column"></i> <span>Resultados</span>
+            </button>
+          </li>
+          <li>
+            <button id="navSettings" class="nav-btn hidden" onclick="showSettingsPage()" title="Configurações">
+              <i class="fa-solid fa-sliders"></i> <span>Configurações</span>
             </button>
           </li>
         </ul>
       </nav>
 
       <div class="system-status-widget">
-        <div class="status-indicator">
+        <div class="status-indicator" style="display: flex; align-items: center; gap: 6px;">
           <span id="sysStatusDot" class="status-dot"></span>
-          <span id="sysStatusText">Offline</span>
+          <span id="sysStatusText" style="font-weight: 700; color: #fff;">Offline</span>
         </div>
-        <div>Conta: <span id="sysAccountVal" class="val">-</span></div>
-        <div>Versão: <span class="val">1.0.0</span></div>
-        <button id="btnExitSidebar" class="nav-btn hidden" onclick="logout()" style="margin-top: 10px; padding: 8px 10px; font-size: 13px;">
-          <i class="fa-solid fa-power-off"></i> Sair
+        <div style="margin-top: 4px;">Conta: <span id="sysAccountMode" class="val" style="color: #fff; font-weight: 700;">-</span></div>
+        <div id="sysAccountBalance" class="val" style="color: var(--text-muted); font-size: 11px;">-</div>
+        <div style="margin-top: 4px; font-size: 11px;">Versão: <span class="val" style="color: #fff;">1.0.0</span></div>
+        <button id="btnExitSidebar" class="nav-btn hidden" onclick="logout()" style="margin-top: 10px; width: 100%; border: 1px solid var(--panel-border); border-radius: 8px; font-size: 12px; height: 36px;">
+          <i class="fa-solid fa-power-off" style="margin-right: 6px;"></i> Sair
         </button>
       </div>
     </aside>
@@ -1684,25 +1731,45 @@
           
           <div class="dashboard-grid">
             <!-- Left Column: Active Radar / Entry Panel -->
-            <div id="radarCardPanel" class="panel" style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 360px; padding: 18px; transition: all 0.5s ease;">
+            <div id="radarCardPanel" class="panel" style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 380px; padding: 15px; transition: all 0.5s ease;">
               
               <!-- SUB-STATE 1: Radar (Scanning) -->
               <div id="radarStatePanel" class="radar-panel-scanning" style="width: 100%;">
-                <h2 class="radar-title" style="justify-content: center;">Radar de Oportunidades</h2>
-                <div class="radar-subtitle" style="justify-content: center;">
-                  <span class="pulse-dot"></span> Procurando Entradas...
+                <h2 style="font-family: var(--font-title); font-size: 20px; font-weight: 800; text-transform: uppercase; letter-spacing: 1px; color: #fff; text-align: center; margin: 10px 0 5px;">Radar de Oportunidades</h2>
+                <div style="font-size: 13px; font-weight: 600; color: var(--accent); text-align: center; margin-bottom: 20px;">
+                  Procurando Entradas...
                 </div>
                 <div class="radar-wrapper">
                   <svg class="radar-svg" viewBox="0 0 200 200">
-                    <circle cx="100" cy="100" r="90" class="radar-ring" />
-                    <circle cx="100" cy="100" r="68" class="radar-ring" />
-                    <circle cx="100" cy="100" r="46" class="radar-ring" />
-                    <circle cx="100" cy="100" r="24" class="radar-ring" />
+                    <!-- Abstract World Map Dotted Pattern -->
+                    <g opacity="0.06" fill="var(--accent)">
+                      <!-- North America -->
+                      <rect x="22" y="45" width="22" height="15" rx="3" />
+                      <rect x="30" y="60" width="12" height="10" rx="2" />
+                      <!-- South America -->
+                      <rect x="42" y="70" width="14" height="24" rx="3" />
+                      <rect x="48" y="94" width="6" height="10" rx="1.5" />
+                      <!-- Africa -->
+                      <rect x="86" y="72" width="18" height="22" rx="3" />
+                      <rect x="94" y="94" width="8" height="10" rx="1.5" />
+                      <!-- Europe / Asia -->
+                      <rect x="80" y="38" width="38" height="20" rx="4" />
+                      <rect x="118" y="42" width="30" height="22" rx="4" />
+                      <rect x="148" y="48" width="22" height="14" rx="3" />
+                      <rect x="110" y="58" width="34" height="20" rx="4" />
+                      <!-- Australia -->
+                      <rect x="144" y="85" width="16" height="12" rx="3" />
+                    </g>
+
+                    <circle cx="100" cy="100" r="90" stroke="var(--accent)" stroke-width="0.8" fill="none" opacity="0.9" />
+                    <circle cx="100" cy="100" r="68" stroke="var(--accent)" stroke-width="0.8" stroke-dasharray="3 3" fill="none" opacity="0.45" />
+                    <circle cx="100" cy="100" r="46" stroke="var(--accent)" stroke-width="0.8" fill="none" opacity="0.9" />
+                    <circle cx="100" cy="100" r="24" stroke="var(--accent)" stroke-width="0.8" stroke-dasharray="3 3" fill="none" opacity="0.45" />
                     
-                    <line x1="10" y1="100" x2="190" y2="100" class="radar-axis" />
-                    <line x1="100" y1="10" x2="100" y2="190" class="radar-axis" />
-                    <line x1="36.36" y1="36.36" x2="163.64" y2="163.64" class="radar-axis" style="opacity: 0.12;" />
-                    <line x1="36.36" y1="163.64" x2="163.64" y2="36.36" class="radar-axis" style="opacity: 0.12;" />
+                    <line x1="10" y1="100" x2="190" y2="100" stroke="var(--accent)" stroke-width="0.6" stroke-dasharray="2 3" opacity="0.3" />
+                    <line x1="100" y1="10" x2="100" y2="190" stroke="var(--accent)" stroke-width="0.6" stroke-dasharray="2 3" opacity="0.3" />
+                    <line x1="36.36" y1="36.36" x2="163.64" y2="163.64" stroke="var(--accent)" stroke-width="0.6" stroke-dasharray="2 3" opacity="0.2" />
+                    <line x1="36.36" y1="163.64" x2="163.64" y2="36.36" stroke="var(--accent)" stroke-width="0.6" stroke-dasharray="2 3" opacity="0.2" />
                     
                     <!-- Center Radar Crosshair Logo -->
                     <g filter="url(#centerGlow)">
@@ -1721,8 +1788,12 @@
                       <path d="M 100,100 L 100,10 A 90,90 0 0,0 36.3,36.3 Z" class="sweeper-trail" />
                     </g>
                     
+                    <!-- Active Target with Connector Line and Outline Box -->
                     <g id="radarActiveTarget" class="radar-target-group hidden">
-                      <text id="radarTargetText" x="106" y="102" fill="var(--accent)" font-size="6.8" font-family="monospace" font-weight="bold" filter="url(#centerGlow)">-</text>
+                      <line id="radarConnectorLine" x1="0" y1="0" x2="0" y2="0" stroke="var(--accent)" stroke-width="0.8" opacity="0.85" />
+                      <rect id="radarTargetBox" x="0" y="0" width="54" height="11" rx="3.5" ry="3.5" fill="#08080b" stroke="var(--accent)" stroke-width="0.8" opacity="0.85" />
+                      <circle id="radarTargetDot" cx="100" cy="100" r="3.2" fill="#ffffff" filter="url(#centerGlow)" />
+                      <text id="radarTargetText" x="0" y="0" fill="var(--accent)" font-size="5.8" font-family="monospace" font-weight="bold" text-anchor="middle" dominant-baseline="central">-</text>
                     </g>
                     
                     <defs>
@@ -1738,12 +1809,35 @@
                   </svg>
                 </div>
                 
-                <div class="radar-status-bar">
-                  <span class="title">Varredura de Sinais em Tempo Real</span>
-                  <div class="radar-info-grid">
-                    <div>ATIVO: <strong id="scanAsset">-</strong></div>
-                    <div>ESTRATÉGIA: <strong id="scanStrategy">-</strong></div>
-                    <div>PROXIMIDADE: <strong id="scanProximity">-</strong></div>
+                <!-- Bottom Horizontal Info Console -->
+                <div style="width: 100%; background: rgba(18, 18, 26, 0.65); border: 1px solid var(--panel-border); border-radius: 12px; padding: 20px; display: flex; flex-direction: column; gap: 15px; margin-top: 20px;">
+                  <span style="font-family: var(--font-title); font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1.5px; color: var(--text-muted); text-align: center; display: block; width: 100%;">Varredura de Sinais em Tempo Real</span>
+                  
+                  <div style="display: grid; grid-template-columns: 1fr 1.5fr 1fr; gap: 15px; text-align: center; align-items: flex-start; padding: 10px 0;">
+                    <!-- Column 1: ATIVO -->
+                    <div style="border-right: 1px solid rgba(255, 255, 255, 0.05); padding-right: 10px;">
+                      <span style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 8px;">Ativo:</span>
+                      <strong id="scanAsset" style="font-family: var(--font-title); font-size: 20px; font-weight: 800; color: var(--accent); display: block;">-</strong>
+                    </div>
+                    
+                    <!-- Column 2: ESTRATÉGIA -->
+                    <div style="border-right: 1px solid rgba(255, 255, 255, 0.05); padding: 0 10px;">
+                      <span style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 8px;">Estratégia:</span>
+                      <strong id="scanStrategy" style="font-family: var(--font-title); font-size: 16px; font-weight: 800; color: var(--accent); display: block; margin-bottom: 5px;">-</strong>
+                      <span id="scanStrategyDesc" style="font-size: 10px; color: var(--accent); opacity: 0.85; line-height: 1.3; display: block; max-width: 250px; margin: 0 auto;">-</span>
+                    </div>
+                    
+                    <!-- Column 3: TEMPO CANDLE -->
+                    <div style="padding-left: 10px;">
+                      <span style="font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; display: block; margin-bottom: 8px;">Tempo Candle:</span>
+                      <strong style="font-family: var(--font-title); font-size: 20px; font-weight: 800; color: var(--accent); display: block;">1 Minuto</strong>
+                    </div>
+                  </div>
+                  
+                  <!-- Bottom Status Bar -->
+                  <div style="border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 12px; text-align: center; font-size: 12px;">
+                    <span style="color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Status: </span>
+                    <strong id="scanStatusText" style="color: var(--accent); font-weight: 700; margin-left: 5px;">Procurando Entrada...</strong>
                   </div>
                 </div>
               </div>
@@ -1789,98 +1883,102 @@
                 <div class="result-sub-text" id="resultSub">Operação encerrada no ativo</div>
                 <div class="result-profit-text" id="resultProfit">+R$ 0,00</div>
               </div>
-
             </div>
 
-            <!-- Right Column: Unified Performance Card -->
-            <div class="panel" style="display: flex; flex-direction: column; gap: 12px; min-height: 360px; padding: 18px;">
-              <h2 class="panel-title" style="margin-bottom: 5px;"><i class="fa-solid fa-chart-pie"></i> Desempenho da Sessão</h2>
-              
-              <!-- Profit Display -->
-              <div style="background: rgba(26, 26, 36, 0.45); border: 1px solid var(--panel-border); border-radius: 12px; padding: 14px 12px; text-align: center;">
-                <span style="font-size: 11px; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-muted); display: block; margin-bottom: 5px;">Saldo Líquido Sessão</span>
-                <strong id="statsTotalProfit" style="font-family: var(--font-title); font-size: 28px; font-weight: 800; line-height: 1;">R$ 0,00</strong>
+                   <!-- Right Column: Unified Performance & Results Sidebar -->
+            <div class="panel" style="display: flex; flex-direction: column; gap: 12px; min-height: 380px; padding: 15px; background: rgba(18, 18, 26, 0.45); border: 1px solid var(--panel-border); border-radius: 16px;">
+              <!-- Header -->
+              <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 12px;">
+                <h2 style="font-family: var(--font-title); font-size: 15px; font-weight: 800; letter-spacing: 1px; color: #fff; margin: 0; text-transform: uppercase;">Resultados</h2>
+                <i class="fa-solid fa-xmark" style="color: var(--text-muted); font-size: 16px; cursor: pointer; opacity: 0.7; transition: opacity 0.2s;" onmouseover="this.style.opacity=1" onmouseout="this.style.opacity=0.7"></i>
               </div>
-
-              <!-- Progress bar & wins / losses counts -->
-              <div style="display: grid; grid-template-columns: 1fr 1.2fr; gap: 12px; align-items: center; background: rgba(26, 26, 36, 0.2); border: 1px solid var(--panel-border); border-radius: 12px; padding: 12px;">
-                <div style="position: relative; width: 72px; height: 72px; margin: 0 auto;">
-                  <div class="circular-progress win" style="width: 100%; height: 100%;">
-                    <svg viewBox="0 0 100 100">
-                      <circle cx="50" cy="50" r="40" class="bg-circle" />
-                      <circle cx="50" cy="50" r="40" class="progress-bar" id="winProgressRing" />
-                    </svg>
-                    <div class="progress-icon win" style="font-size: 17px; font-family: var(--font-title); font-weight: 700; color: var(--green);" id="statsWinPercent">0%</div>
+              
+              <!-- Sub-header -->
+              <div style="display: flex; align-items: center; gap: 8px; font-size: 11px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.8px; text-transform: uppercase; margin-top: -5px;">
+                <i class="fa-solid fa-gauge-high" style="color: var(--accent); font-size: 12px;"></i>
+                <span>Desempenho da Sessão</span>
+              </div>
+              
+              <!-- Profit Card -->
+              <div style="background: rgba(26, 26, 36, 0.5); border: 1px solid var(--panel-border); border-radius: 12px; padding: 18px 12px; text-align: center; position: relative; overflow: hidden; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);">
+                <span style="font-size: 10px; text-transform: uppercase; letter-spacing: 1px; color: var(--text-muted); display: block; margin-bottom: 6px;">Saldo Líquido Sessão</span>
+                <strong id="statsTotalProfit" style="font-family: var(--font-title); font-size: 28px; font-weight: 800; color: var(--accent); line-height: 1;">R$ 0,00</strong>
+                <!-- Wave Graphics -->
+                <div style="margin-top: 8px; height: 12px; opacity: 0.5; overflow: hidden;">
+                  <svg viewBox="0 0 100 10" preserveAspectRatio="none" style="width: 100%; height: 100%;">
+                    <path d="M0,5 Q15,0 30,7 T60,3 T90,8 L100,5" fill="none" stroke="var(--accent)" stroke-width="1.2" filter="drop-shadow(0 0 2px var(--accent))"></path>
+                  </svg>
+                </div>
+              </div>
+              
+              <!-- Stats Row with Circle Gauge & Counts -->
+              <div style="display: grid; grid-template-columns: 1fr 1.15fr; gap: 12px; align-items: center; background: rgba(26, 26, 36, 0.25); border: 1px solid var(--panel-border); border-radius: 12px; padding: 12px;">
+                <div style="display: flex; flex-direction: column; align-items: center; gap: 6px;">
+                  <div style="position: relative; width: 64px; height: 64px;">
+                    <div class="circular-progress win" style="width: 100%; height: 100%;">
+                      <svg viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="40" class="bg-circle" />
+                        <circle cx="50" cy="50" r="40" class="progress-bar" id="winProgressRing" stroke-dasharray="251.3" stroke-dashoffset="251.3" />
+                      </svg>
+                      <div class="progress-icon win" style="font-size: 15px; font-family: var(--font-title); font-weight: 800; color: #00e676;" id="statsWinPercent">0%</div>
+                    </div>
                   </div>
+                  <span style="font-size: 9px; text-transform: uppercase; color: var(--text-muted); letter-spacing: 0.5px; white-space: nowrap;">Taxa de Acerto</span>
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 8px;">
-                  <div style="display: flex; justify-content: space-between; font-size: 13px;">
-                    <span style="color: var(--text-muted);"><i class="fa-solid fa-trophy" style="color: var(--green); margin-right: 5px;"></i> Wins:</span>
-                    <strong id="statsWinCount" style="color: var(--green);">0</strong>
+                  <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+                    <span style="color: var(--text-muted); display: flex; align-items: center; gap: 5px;"><i class="fa-solid fa-trophy" style="color: #00e676; font-size: 11px;"></i> Wins:</span>
+                    <strong id="statsWinCount" style="color: #00e676; font-size: 13px;">0</strong>
                   </div>
-                  <div style="display: flex; justify-content: space-between; font-size: 13px;">
-                    <span style="color: var(--text-muted);"><i class="fa-solid fa-circle-xmark" style="color: var(--accent); margin-right: 5px;"></i> Losses:</span>
-                    <strong id="statsLossCount" style="color: var(--accent);">0</strong>
+                  <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px;">
+                    <span style="color: var(--text-muted); display: flex; align-items: center; gap: 5px;"><i class="fa-solid fa-circle-xmark" style="color: var(--accent); font-size: 11px;"></i> Losses:</span>
+                    <strong id="statsLossCount" style="color: var(--accent); font-size: 13px;">0</strong>
                   </div>
-                  <div style="display: flex; justify-content: space-between; font-size: 13px; border-top: 1px solid var(--panel-border); padding-top: 6px;">
+                  <div style="display: flex; justify-content: space-between; align-items: center; font-size: 12px; border-top: 1px solid rgba(255,255,255,0.05); padding-top: 5px;">
                     <span style="color: var(--text-muted);">Total Ops:</span>
-                    <strong id="statsTotalOps">0</strong>
+                    <strong id="statsTotalOps" style="color: #fff; font-size: 12px;">0</strong>
                   </div>
                 </div>
               </div>
-
-              <!-- Stop Win / Loss Status Bars -->
-              <div style="display: flex; flex-direction: column; gap: 12px; margin-top: auto; padding-top: 10px;">
+              
+              <!-- Progress Bars Stop Win/Loss -->
+              <div style="display: flex; flex-direction: column; gap: 12px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px;">
                 <div>
-                  <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px;">
+                  <div style="display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 5px;">
                     <span style="color: var(--text-muted);">Progresso Stop Win</span>
-                    <span id="labelStopWin" style="font-family: monospace; font-weight: 700;">R$ 0.00 / R$ 0.00</span>
+                    <span id="labelStopWin" style="font-family: monospace; font-weight: 700; color: var(--text-muted);">R$ 0.00 / R$ 0.00</span>
                   </div>
-                  <div style="width: 100%; height: 6px; background-color: #121217; border-radius: 3px; overflow: hidden;">
-                    <div id="barStopWin" style="height: 100%; width: 0%; background: var(--green); transition: width 0.4s ease;"></div>
+                  <div style="width: 100%; height: 4px; background-color: #121217; border-radius: 2px; overflow: hidden;">
+                    <div id="barStopWin" style="height: 100%; width: 0%; background: #00e676; transition: width 0.4s ease;"></div>
                   </div>
                 </div>
 
                 <div>
-                  <div style="display: flex; justify-content: space-between; font-size: 12px; margin-bottom: 5px;">
+                  <div style="display: flex; justify-content: space-between; font-size: 10px; margin-bottom: 5px;">
                     <span style="color: var(--text-muted);">Progresso Stop Loss</span>
-                    <span id="labelStopLoss" style="font-family: monospace; font-weight: 700;">R$ 0.00 / R$ 0.00</span>
+                    <span id="labelStopLoss" style="font-family: monospace; font-weight: 700; color: var(--text-muted);">R$ 0.00 / R$ 0.00</span>
                   </div>
-                  <div style="width: 100%; height: 6px; background-color: #121217; border-radius: 3px; overflow: hidden;">
+                  <div style="width: 100%; height: 4px; background-color: #121217; border-radius: 2px; overflow: hidden;">
                     <div id="barStopLoss" style="height: 100%; width: 0%; background: var(--accent); transition: width 0.4s ease;"></div>
                   </div>
                 </div>
               </div>
-            </div>
-          </div>
-
-          <!-- Recent Operations List -->
-          <div class="recent-ops-section">
-            <div class="panel">
-              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px;">
-                <h2 class="panel-title" style="margin-bottom: 0;"><i class="fa-solid fa-rectangle-list"></i> Histórico de Operações da Sessão</h2>
-                <button onclick="resetStops()" class="btn-refresh" style="font-size: 12px; padding: 7px 12px; border-color: rgba(255, 51, 51, 0.4); color: var(--red);"><i class="fa-solid fa-trash-can"></i> Limpar Resultados</button>
+              
+              <!-- Title: Últimas Operações -->
+              <div style="font-size: 11px; font-weight: 700; color: var(--text-muted); letter-spacing: 0.8px; text-transform: uppercase; margin-top: 5px;">
+                <span>Últimas Operações</span>
               </div>
-              <div class="table-container">
-                <table class="data-table">
-                  <thead>
-                    <tr>
-                      <th>Horário</th>
-                      <th>Ativo</th>
-                      <th>Posição</th>
-                      <th>Estratégia/Motivo</th>
-                      <th>Gale/Etapa</th>
-                      <th>Resultado</th>
-                      <th>Lucro/Prejuízo</th>
-                    </tr>
-                  </thead>
-                  <tbody id="resultsRows">
-                    <tr>
-                      <td colspan="7" style="text-align: center; color: var(--text-muted);">Nenhuma operação registrada na sessão.</td>
-                    </tr>
-                  </tbody>
-                </table>
+              
+              <!-- List of Recent Operations -->
+              <div id="recentOpsSidebarList" style="display: flex; flex-direction: column; gap: 4px; max-height: 250px; overflow-y: auto;">
+                <div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px;">Nenhuma operação registrada na sessão.</div>
               </div>
+              
+              <!-- Bottom Button -->
+              <button onclick="toggleAllOpsModal(true)" style="width: 100%; padding: 12px; background: rgba(26, 26, 36, 0.4); border: 1px solid var(--panel-border); border-radius: 10px; color: var(--text-muted); font-size: 12px; font-weight: 600; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: all 0.3s ease; margin-top: auto;" onmouseover="this.style.borderColor='var(--accent)'; this.style.color='#fff';" onmouseout="this.style.borderColor='var(--panel-border)'; this.style.color='var(--text-muted)';">
+                <span>Ver todas operações</span>
+                <i class="fa-solid fa-chevron-right" style="font-size: 10px;"></i>
+              </button>
             </div>
           </div>
         </div>
@@ -2126,7 +2224,224 @@
 
         </div>
       </section>
+
+      <!-- PAGE: RESULTADOS -->
+      <section id="resultadosPage" class="hidden">
+        <!-- Top header row -->
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 25px; flex-wrap: wrap; gap: 15px;">
+          <div>
+            <h1 style="font-family: var(--font-title); font-size: 26px; font-weight: 800; text-transform: uppercase; letter-spacing: 1.5px; color: #fff;">Resultados</h1>
+          </div>
+          <div style="display: flex; gap: 12px; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 8px; background: #0c0c12; border: 1px solid var(--panel-border); padding: 8px 14px; border-radius: 8px; font-size: 13px; color: var(--text-muted); cursor: pointer;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--panel-border)'">
+              <i class="fa-regular fa-calendar"></i>
+              <span id="resultsDateRange" style="font-weight: 600; color: #fff;">Últimos 15 Dias</span>
+              <i class="fa-solid fa-chevron-down" style="font-size: 10px;"></i>
+            </div>
+            <button onclick="exportHistoryReport()" class="btn-refresh" style="font-size: 13px; padding: 9px 16px; border-radius: 8px; color: #fff; background: rgba(255, 102, 0, 0.1); border-color: rgba(255, 102, 0, 0.3); display: flex; align-items: center; gap: 8px; font-weight: 600;" onmouseover="this.style.background='var(--accent)'" onmouseout="this.style.background='rgba(255, 102, 0, 0.1)'">
+              <i class="fa-solid fa-download"></i> Exportar Relatório
+            </button>
+          </div>
+        </div>
+
+        <!-- Row 1: Net Profit Evolution and Best/Worst strategies -->
+        <div class="results-grid-3" style="align-items: stretch;">
+          
+          <!-- Card 1: Balance Evolution Line Chart -->
+          <div class="panel" style="display: flex; flex-direction: column; padding: 20px; justify-content: space-between;">
+            <h3 class="panel-title" style="margin-bottom: 15px; font-size: 13px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted);"><i class="fa-solid fa-chart-line" style="color: var(--accent); margin-right: 5px;"></i> Evolução do Saldo (Líquido)</h3>
+            <div style="width: 100%; height: 260px; position: relative;">
+              <canvas id="profitEvolutionChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Card 2: Strategies Best -->
+          <div class="panel" style="display: flex; flex-direction: column; padding: 20px;">
+            <h3 class="panel-title" style="margin-bottom: 15px; font-size: 13px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted);"><i class="fa-solid fa-square-check" style="color: #00e676; margin-right: 5px;"></i> Estratégias que mais respeitam</h3>
+            <div id="strategiesBestList" style="display: flex; flex-direction: column; gap: 12px; flex-grow: 1; justify-content: center;">
+              <!-- Dynamic entries here -->
+            </div>
+          </div>
+
+          <!-- Card 3: Strategies Worst -->
+          <div class="panel" style="display: flex; flex-direction: column; padding: 20px;">
+            <h3 class="panel-title" style="margin-bottom: 15px; font-size: 13px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted);"><i class="fa-solid fa-square-xmark" style="color: var(--accent); margin-right: 5px;"></i> Estratégias que mais erram</h3>
+            <div id="strategiesWorstList" style="display: flex; flex-direction: column; gap: 12px; flex-grow: 1; justify-content: center;">
+              <!-- Dynamic entries here -->
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Row 2: Heatmap and Frequencies -->
+        <div class="results-grid-2" style="align-items: stretch;">
+          
+          <!-- Card 1: Heatmap Acerto por Horário -->
+          <div class="panel" style="display: flex; flex-direction: column; padding: 20px;">
+            <h3 class="panel-title" style="margin-bottom: 15px; font-size: 13px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted);"><i class="fa-solid fa-bullseye" style="color: var(--accent); margin-right: 5px;"></i> Acerto por Horário (Taxa de assertividade)</h3>
+            
+            <div class="table-container" style="flex-grow: 1; display: flex; flex-direction: column; justify-content: center;">
+              <table style="width: 100%; border-collapse: separate; border-spacing: 3.5px; font-size: 11px;">
+                <thead>
+                  <tr id="heatmapHeaderRow">
+                    <th style="padding: 5px; color: var(--text-muted); font-weight: 500; font-family: var(--font-title);">Dia</th>
+                    <!-- 12 blocks of 2 hours -->
+                    <th style="padding: 5px; color: var(--text-muted); font-weight: 500; font-family: var(--font-title);">00h</th>
+                    <th style="padding: 5px; color: var(--text-muted); font-weight: 500; font-family: var(--font-title);">02h</th>
+                    <th style="padding: 5px; color: var(--text-muted); font-weight: 500; font-family: var(--font-title);">04h</th>
+                    <th style="padding: 5px; color: var(--text-muted); font-weight: 500; font-family: var(--font-title);">06h</th>
+                    <th style="padding: 5px; color: var(--text-muted); font-weight: 500; font-family: var(--font-title);">08h</th>
+                    <th style="padding: 5px; color: var(--text-muted); font-weight: 500; font-family: var(--font-title);">10h</th>
+                    <th style="padding: 5px; color: var(--text-muted); font-weight: 500; font-family: var(--font-title);">12h</th>
+                    <th style="padding: 5px; color: var(--text-muted); font-weight: 500; font-family: var(--font-title);">14h</th>
+                    <th style="padding: 5px; color: var(--text-muted); font-weight: 500; font-family: var(--font-title);">16h</th>
+                    <th style="padding: 5px; color: var(--text-muted); font-weight: 500; font-family: var(--font-title);">18h</th>
+                    <th style="padding: 5px; color: var(--text-muted); font-weight: 500; font-family: var(--font-title);">20h</th>
+                    <th style="padding: 5px; color: var(--text-muted); font-weight: 500; font-family: var(--font-title);">22h</th>
+                  </tr>
+                </thead>
+                <tbody id="heatmapTableBody">
+                  <!-- Generated dynamically in javascript -->
+                </tbody>
+              </table>
+            </div>
+
+            <!-- Legend -->
+            <div style="display: flex; gap: 15px; margin-top: 15px; font-size: 10px; justify-content: center; align-items: center;">
+              <span style="display: flex; align-items: center; gap: 4px; color: var(--text-muted);"><span style="width: 10px; height: 10px; background: rgba(255, 51, 51, 0.2); border: 1px solid rgba(255, 51, 51, 0.4); border-radius: 2px;"></span> 0% - 30%</span>
+              <span style="display: flex; align-items: center; gap: 4px; color: var(--text-muted);"><span style="width: 10px; height: 10px; background: rgba(255, 102, 0, 0.2); border: 1px solid rgba(255, 102, 0, 0.4); border-radius: 2px;"></span> 30% - 50%</span>
+              <span style="display: flex; align-items: center; gap: 4px; color: var(--text-muted);"><span style="width: 10px; height: 10px; background: rgba(0, 230, 118, 0.15); border: 1px solid rgba(0, 230, 118, 0.3); border-radius: 2px;"></span> 50% - 70%</span>
+              <span style="display: flex; align-items: center; gap: 4px; color: var(--text-muted);"><span style="width: 10px; height: 10px; background: rgba(0, 230, 118, 0.3); border: 1px solid rgba(0, 230, 118, 0.6); border-radius: 2px;"></span> 70% - 100%</span>
+            </div>
+          </div>
+
+          <!-- Card 2: Operations by Hour Bar Chart -->
+          <div class="panel" style="display: flex; flex-direction: column; padding: 20px; justify-content: space-between;">
+            <h3 class="panel-title" style="margin-bottom: 15px; font-size: 13px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted);"><i class="fa-solid fa-chart-simple" style="color: var(--accent); margin-right: 5px;"></i> Quantidade de Operações por Horário</h3>
+            <div style="width: 100%; height: 200px; position: relative;">
+              <canvas id="opsByHourChart"></canvas>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- Row 3: Paginated Operations History with Filters -->
+        <div class="panel" style="padding: 20px;">
+          <!-- Section title and filter controls -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 15px; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px;">
+            <h3 class="panel-title" style="margin: 0; font-size: 14px; text-transform: uppercase; letter-spacing: 0.8px; display: flex; align-items: center; gap: 8px;"><i class="fa-solid fa-folder-open" style="color: var(--accent);"></i> Histórico de Operações</h3>
+            
+            <!-- Filters row -->
+            <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+              
+              <!-- Filter: Asset -->
+              <select id="resultsFilterAsset" onchange="applyResultsFilters()" class="input-field" style="width: 130px; height: 32px; font-size: 11px; padding: 0 8px; border-radius: 6px; background: #0c0c12;">
+                <option value="ALL">Todos Ativos</option>
+              </select>
+
+              <!-- Filter: Strategy -->
+              <select id="resultsFilterStrategy" onchange="applyResultsFilters()" class="input-field" style="width: 140px; height: 32px; font-size: 11px; padding: 0 8px; border-radius: 6px; background: #0c0c12;">
+                <option value="ALL">Todas Estratégias</option>
+                <option value="Estratégia 01">Estratégia 01</option>
+                <option value="Estratégia 02">Estratégia 02</option>
+                <option value="Estratégia 03">Estratégia 03</option>
+                <option value="Estratégia 04">Estratégia 04</option>
+                <option value="Estratégia 05">Estratégia 05</option>
+                <option value="Pares 18min">Pares 18min</option>
+              </select>
+
+              <!-- Filter: Type -->
+              <select id="resultsFilterType" onchange="applyResultsFilters()" class="input-field" style="width: 110px; height: 32px; font-size: 11px; padding: 0 8px; border-radius: 6px; background: #0c0c12;">
+                <option value="ALL">Todos Tipos</option>
+                <option value="CALL">CALL</option>
+                <option value="PUT">PUT</option>
+              </select>
+
+              <!-- Filter: Result -->
+              <select id="resultsFilterOutcome" onchange="applyResultsFilters()" class="input-field" style="width: 130px; height: 32px; font-size: 11px; padding: 0 8px; border-radius: 6px; background: #0c0c12;">
+                <option value="ALL">Todos Resultados</option>
+                <option value="WIN">WIN</option>
+                <option value="LOSS">LOSS</option>
+                <option value="DOJI">DOJI</option>
+              </select>
+
+              <!-- Search Bar -->
+              <div style="position: relative;">
+                <input type="text" id="resultsSearch" oninput="applyResultsFilters()" placeholder="Buscar operação..." class="input-field" style="width: 160px; height: 32px; font-size: 11px; padding: 0 8px 0 28px; border-radius: 6px; background: #0c0c12;" />
+                <i class="fa-solid fa-magnifying-glass" style="position: absolute; left: 10px; top: 10px; font-size: 11px; color: var(--text-muted);"></i>
+              </div>
+
+            </div>
+          </div>
+
+          <!-- Table Container -->
+          <div class="table-container">
+            <table class="data-table">
+              <thead>
+                <tr>
+                  <th>Horário</th>
+                  <th>Ativo</th>
+                  <th>Tipo</th>
+                  <th>Estratégia</th>
+                  <th>Tempo</th>
+                  <th>Resultado</th>
+                  <th>Lucro/Prejuízo</th>
+                </tr>
+              </thead>
+              <tbody id="resultsPageTableBody">
+                <tr>
+                  <td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">Carregando histórico de operações...</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Pagination Footer -->
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-top: 15px; font-size: 12px; color: var(--text-muted); flex-wrap: wrap; gap: 10px;">
+            <div id="resultsPaginationInfo">Mostrando 0 - 0 de 0</div>
+            <div style="display: flex; gap: 5px; align-items: center;" id="resultsPaginationControls">
+              <!-- Rendered dynamically -->
+            </div>
+          </div>
+
+        </div>
+
+      </section>
     </main>
+
+    <!-- Modal: All Operations -->
+    <div id="allOpsModal" class="hidden" style="position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(8, 8, 11, 0.85); backdrop-filter: blur(8px); z-index: 100; display: flex; justify-content: center; align-items: center; transition: all 0.3s ease;">
+      <div class="panel" style="width: 90%; max-width: 900px; max-height: 85vh; display: flex; flex-direction: column; padding: 25px; box-shadow: 0 10px 40px rgba(0,0,0,0.5); border: 1px solid var(--panel-border); background: #08080b;">
+        <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 15px; margin-bottom: 20px;">
+          <h2 class="panel-title" style="margin-bottom: 0;"><i class="fa-solid fa-rectangle-list"></i> Histórico Completo da Sessão</h2>
+          <div style="display: flex; gap: 10px; align-items: center;">
+            <button onclick="resetStops()" class="btn-refresh" style="font-size: 12px; padding: 7px 12px; border-color: rgba(255, 51, 51, 0.4); color: var(--red); background: transparent;"><i class="fa-solid fa-trash-can"></i> Limpar Resultados</button>
+            <button onclick="toggleAllOpsModal(false)" style="background: transparent; border: none; color: var(--text-muted); font-size: 22px; cursor: pointer; line-height: 1;"><i class="fa-solid fa-xmark"></i></button>
+          </div>
+        </div>
+        
+        <div class="table-container" style="overflow-y: auto; flex-grow: 1;">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Horário</th>
+                <th>Ativo</th>
+                <th>Posição</th>
+                <th>Estratégia/Motivo</th>
+                <th>Gale/Etapa</th>
+                <th>Resultado</th>
+                <th>Lucro/Prejuízo</th>
+              </tr>
+            </thead>
+            <tbody id="resultsRows">
+              <tr>
+                <td colspan="7" style="text-align: center; color: var(--text-muted);">Nenhuma operação registrada na sessão.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
   </div>
 
   <script>
@@ -2137,6 +2452,7 @@
     let settingsHydrated = false;
     let sequenceRefreshTimer = null;
     let currentActivePage = "loginPage";
+    let lastKnownTotalOps = null;
 
     // Overlay control vars
     let lastTradeCount = null;
@@ -2147,14 +2463,15 @@
     let targetX = 100;
     let targetY = 100;
 
-    const pages = ["loginPage", "inicioPage", "sequencesPage", "pairWatchPage", "brokerPage", "settingsPage"];
+    const pages = ["loginPage", "inicioPage", "sequencesPage", "pairWatchPage", "brokerPage", "settingsPage", "resultadosPage"];
     const navs = {
       loginPage: "navLogin",
       inicioPage: "navInicio",
       sequencesPage: "navSequences",
       pairWatchPage: "navPairWatch",
       brokerPage: "navBroker",
-      settingsPage: "navSettings"
+      settingsPage: "navSettings",
+      resultadosPage: "navResultados"
     };
 
     function setPage(page, title) {
@@ -2206,6 +2523,415 @@
       setPage("pairWatchPage", "Pares 18min");
       startPolling();
       await refresh();
+    }
+
+    let profitEvolutionChartInstance = null;
+    let opsByHourChartInstance = null;
+    let resultsHistoryData = [];
+    let filteredResultsData = [];
+    let resultsCurrentPage = 1;
+    const resultsPageSize = 10;
+
+    async function showResultadosPage() {
+      if (!connected) {
+        showLogin();
+        return;
+      }
+      setPage("resultadosPage", "Painel de Resultados");
+      startPolling();
+      await loadResultsPageData();
+    }
+
+    async function loadResultsPageData() {
+      try {
+        const data = await request("/api/history/stats");
+        if (!data) return;
+
+        resultsHistoryData = data.trades || [];
+        
+        // 1. Populate filters options dynamically (Assets)
+        const assetsFilter = $("resultsFilterAsset");
+        if (assetsFilter) {
+          assetsFilter.innerHTML = '<option value="ALL">Todos Ativos</option>';
+          const uniqueAssets = [...new Set(resultsHistoryData.map(t => t.asset).filter(Boolean))].sort();
+          uniqueAssets.forEach(asset => {
+            const opt = document.createElement("option");
+            opt.value = asset;
+            opt.textContent = formatAssetName(asset);
+            assetsFilter.appendChild(opt);
+          });
+        }
+
+        // Apply filters initially
+        applyResultsFilters();
+
+        // 2. Render Charts
+        renderProfitEvolutionChart(data.balance_evolution || []);
+        renderOpsByHourChart(data.ops_by_hour || []);
+
+        // 3. Render Best & Worst Strategies lists
+        renderStrategiesRanking(data.strategies_best || [], data.strategies_worst || []);
+
+        // 4. Render Heatmap Grid
+        renderHeatmapGrid(data.heatmap || []);
+
+      } catch (err) {
+        console.error("Erro ao carregar dados do dashboard de estatísticas:", err);
+      }
+    }
+
+    function renderProfitEvolutionChart(evolution) {
+      const canvasEl = $("profitEvolutionChart");
+      if (!canvasEl) return;
+      const ctx = canvasEl.getContext("2d");
+      if (profitEvolutionChartInstance) {
+        profitEvolutionChartInstance.destroy();
+      }
+
+      const labels = evolution.map(e => e.date);
+      const dataPoints = evolution.map(e => e.cumulative);
+
+      profitEvolutionChartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: [{
+            label: 'Saldo Líquido',
+            data: dataPoints,
+            borderColor: '#ff6600',
+            borderWidth: 2,
+            backgroundColor: 'rgba(255, 102, 0, 0.05)',
+            fill: true,
+            tension: 0.35,
+            pointBackgroundColor: '#ff6600',
+            pointBorderColor: '#fff',
+            pointHoverRadius: 6,
+            pointHoverBackgroundColor: '#ff6600'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0c0c12',
+              titleColor: '#fff',
+              bodyColor: '#ff6600',
+              borderColor: 'rgba(255, 255, 255, 0.05)',
+              borderWidth: 1,
+              callbacks: {
+                label: function(context) {
+                  return ` R$ ${context.parsed.y.toFixed(2)}`;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(255, 255, 255, 0.02)' },
+              ticks: { color: '#858b9c', font: { family: 'Outfit', size: 10 } }
+            },
+            y: {
+              grid: { color: 'rgba(255, 255, 255, 0.04)' },
+              ticks: {
+                color: '#858b9c',
+                font: { family: 'Outfit', size: 10 },
+                callback: function(value) {
+                  return `R$ ${value}`;
+                }
+              }
+            }
+          }
+        }
+      });
+    }
+
+    function renderOpsByHourChart(opsByHour) {
+      const canvasEl = $("opsByHourChart");
+      if (!canvasEl) return;
+      const ctx = canvasEl.getContext("2d");
+      if (opsByHourChartInstance) {
+        opsByHourChartInstance.destroy();
+      }
+
+      const labels = Array.from({length: 24}, (_, i) => `${i.toString().padStart(2, '0')}h`);
+
+      opsByHourChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+          labels: labels,
+          datasets: [{
+            data: opsByHour,
+            backgroundColor: '#ff6600',
+            borderRadius: 4,
+            hoverBackgroundColor: '#ff8533'
+          }]
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          plugins: {
+            legend: { display: false },
+            tooltip: {
+              backgroundColor: '#0c0c12',
+              titleColor: '#fff',
+              bodyColor: '#fff',
+              borderColor: 'rgba(255, 255, 255, 0.05)',
+              borderWidth: 1
+            }
+          },
+          scales: {
+            x: {
+              grid: { display: false },
+              ticks: { color: '#858b9c', font: { family: 'Outfit', size: 9 }, autoSkip: true, maxRotation: 0 }
+            },
+            y: {
+              grid: { color: 'rgba(255, 255, 255, 0.03)' },
+              ticks: { color: '#858b9c', font: { family: 'Outfit', size: 10 }, precision: 0 }
+            }
+          }
+        }
+      });
+    }
+
+    function renderStrategiesRanking(best, worst) {
+      const bestList = $("strategiesBestList");
+      const worstList = $("strategiesWorstList");
+
+      if (bestList) {
+        if (!best.length) {
+          bestList.innerHTML = '<div style="text-align:center; color:var(--text-muted); font-size:12px;">Sem dados suficientes</div>';
+        } else {
+          bestList.innerHTML = best.slice(0, 5).map(s => `
+            <div style="display:flex; flex-direction:column; gap: 4px;">
+              <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600;">
+                <span style="color:#fff;">${s.name}</span>
+                <span style="color:#00e676;">${s.win_rate.toFixed(1)}%</span>
+              </div>
+              <div style="width:100%; height:6px; background:#121217; border-radius:3px; overflow:hidden;">
+                <div style="height:100%; width:${s.win_rate}%; background:#00e676; border-radius:3px;"></div>
+              </div>
+            </div>
+          `).join("");
+        }
+      }
+
+      if (worstList) {
+        if (!worst.length) {
+          worstList.innerHTML = '<div style="text-align:center; color:var(--text-muted); font-size:12px;">Sem dados suficientes</div>';
+        } else {
+          worstList.innerHTML = worst.slice(0, 5).map(s => `
+            <div style="display:flex; flex-direction:column; gap: 4px;">
+              <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600;">
+                <span style="color:#fff;">${s.name}</span>
+                <span style="color:var(--accent);">${s.loss_rate.toFixed(1)}%</span>
+              </div>
+              <div style="width:100%; height:6px; background:#121217; border-radius:3px; overflow:hidden;">
+                <div style="height:100%; width:${s.loss_rate}%; background:var(--accent); border-radius:3px;"></div>
+              </div>
+            </div>
+          `).join("");
+        }
+      }
+    }
+
+    function renderHeatmapGrid(heatmap) {
+      const container = $("heatmapTableBody");
+      if (!container) return;
+
+      const weekdays = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+      
+      container.innerHTML = heatmap.map((row, wdIndex) => {
+        const cellsHtml = row.map(cell => {
+          const rate = cell.win_rate;
+          let cellCls = "";
+          let label = "-";
+          if (cell.total > 0) {
+            label = `${rate.toFixed(0)}%`;
+            if (rate < 30) cellCls = 'background: rgba(255, 51, 51, 0.2); border: 1px solid rgba(255, 51, 51, 0.4); color: #ff3333;';
+            else if (rate < 50) cellCls = 'background: rgba(255, 102, 0, 0.2); border: 1px solid rgba(255, 102, 0, 0.4); color: var(--accent);';
+            else if (rate < 70) cellCls = 'background: rgba(0, 230, 118, 0.15); border: 1px solid rgba(0, 230, 118, 0.3); color: #00e676;';
+            else cellCls = 'background: rgba(0, 230, 118, 0.3); border: 1px solid rgba(0, 230, 118, 0.6); color: #00ff88;';
+          } else {
+            cellCls = 'background: rgba(255, 255, 255, 0.01); border: 1px solid rgba(255, 255, 255, 0.03); color: var(--text-muted);';
+          }
+          return `<td style="padding: 6px; text-align: center; font-family: monospace; font-weight: 700; border-radius: 4px; ${cellCls}">${label}</td>`;
+        }).join("");
+
+        return `
+          <tr>
+            <td style="padding: 6px; font-weight: 600; color: #fff; font-family: var(--font-title);">${weekdays[wdIndex]}</td>
+            ${cellsHtml}
+          </tr>
+        `;
+      }).join("");
+    }
+
+    function applyResultsFilters() {
+      const assetVal = $("resultsFilterAsset").value;
+      const strategyVal = $("resultsFilterStrategy").value;
+      const typeVal = $("resultsFilterType").value;
+      const outcomeVal = $("resultsFilterOutcome").value;
+      const searchVal = $("resultsSearch").value.toLowerCase();
+
+      filteredResultsData = resultsHistoryData.filter(trade => {
+        if (assetVal !== "ALL" && trade.asset !== assetVal) return false;
+        
+        if (strategyVal !== "ALL") {
+          const pattern = trade.motivo || trade.pattern || "8 Velas Consecutivas";
+          const pattern_lower = pattern.toLowerCase();
+          
+          let tradeStrat = "";
+          if (pattern_lower.includes("8 velas") || pattern_lower.includes("8 candles")) tradeStrat = "Estratégia 01";
+          else if (pattern_lower.includes("reversao") || pattern_lower.includes("reversão")) tradeStrat = "Estratégia 02";
+          else if (pattern_lower.includes("ma21") || pattern_lower.includes("compra no 33") || pattern_lower.includes("venda no 33")) tradeStrat = "Estratégia 03";
+          else if (pattern_lower.includes("pares 18min") || pattern_lower.includes("pair watch")) tradeStrat = "Pares 18min";
+          else tradeStrat = pattern.includes("04") ? "Estratégia 04" : pattern.includes("05") ? "Estratégia 05" : "Estratégia 01";
+
+          if (tradeStrat !== strategyVal) return false;
+        }
+
+        if (typeVal !== "ALL" && trade.direction !== typeVal) return false;
+        if (outcomeVal !== "ALL" && trade.result !== outcomeVal) return false;
+
+        if (searchVal) {
+          const assetName = (trade.asset || "").toLowerCase();
+          const timestamp = (trade.timestamp || "").toLowerCase();
+          const motivo = (trade.motivo || trade.pattern || "").toLowerCase();
+          if (!assetName.includes(searchVal) && !timestamp.includes(searchVal) && !motivo.includes(searchVal)) {
+            return false;
+          }
+        }
+
+        return true;
+      });
+
+      resultsCurrentPage = 1;
+      renderResultsPageTable();
+    }
+
+    function renderResultsPageTable() {
+      const container = $("resultsPageTableBody");
+      if (!container) return;
+
+      if (!filteredResultsData.length) {
+        container.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">Nenhuma operação encontrada com os filtros selecionados.</td></tr>`;
+        $("resultsPaginationInfo").textContent = "Mostrando 0 - 0 de 0";
+        $("resultsPaginationControls").innerHTML = "";
+        return;
+      }
+
+      const totalCount = filteredResultsData.length;
+      const totalPages = Math.ceil(totalCount / resultsPageSize);
+      
+      if (resultsCurrentPage > totalPages) resultsCurrentPage = totalPages;
+      if (resultsCurrentPage < 1) resultsCurrentPage = 1;
+
+      const startIndex = (resultsCurrentPage - 1) * resultsPageSize;
+      const endIndex = Math.min(startIndex + resultsPageSize, totalCount);
+
+      const paginatedData = filteredResultsData.slice(startIndex, endIndex);
+
+      container.innerHTML = paginatedData.map(row => {
+        const isWin = row.result === "WIN";
+        const dirCls = row.direction === "CALL" ? "call" : "put";
+        const dirLbl = row.direction === "CALL" ? "COMPRA" : "VENDA";
+        const dirIcon = row.direction === "CALL" ? "fa-arrow-up" : "fa-arrow-down";
+        const profit = Number(row.profit || 0);
+
+        const pattern = row.motivo || row.pattern || "8 Velas Consecutivas";
+        const pattern_lower = pattern.toLowerCase();
+        let displayStrat = "Estratégia 01";
+        if (pattern_lower.includes("8 velas") || pattern_lower.includes("8 candles")) displayStrat = "Estratégia 01";
+        else if (pattern_lower.includes("reversao") || pattern_lower.includes("reversão")) displayStrat = "Estratégia 02";
+        else if (pattern_lower.includes("ma21") || pattern_lower.includes("compra no 33") || pattern_lower.includes("venda no 33")) displayStrat = "Estratégia 03";
+        else if (pattern_lower.includes("pares 18min") || pattern_lower.includes("pair watch")) displayStrat = "Pares 18min";
+        else displayStrat = pattern.includes("04") ? "Estratégia 04" : pattern.includes("05") ? "Estratégia 05" : "Estratégia 01";
+
+        return `
+          <tr>
+            <td style="font-family: monospace; font-size:12px;">${row.timestamp || "-"}</td>
+            <td><strong>${row.asset ? formatAssetName(row.asset) : "-"}</strong></td>
+            <td>
+              <span class="badge-dir ${dirCls}" style="display:flex; align-items:center; justify-content:center; gap:4px; width:75px; height:24px; font-weight:700;">
+                ${dirLbl} <i class="fa-solid ${dirIcon}" style="font-size: 10px;"></i>
+              </span>
+            </td>
+            <td><span style="font-size: 12px; font-weight:600; color: #fff;">${displayStrat}</span></td>
+            <td>1 Min</td>
+            <td><span class="badge-result ${isWin ? 'win' : 'loss'}" style="width:55px; text-align:center; height:22px; font-weight:700;">${row.result || "-"}</span></td>
+            <td><strong class="${profit >= 0 ? 'green' : 'red'}" style="font-size:13px;">${profit >= 0 ? '+' : ''}R$ ${profit.toFixed(2)}</strong></td>
+          </tr>
+        `;
+      }).join("");
+
+      $("resultsPaginationInfo").textContent = `Mostrando ${startIndex + 1} - ${endIndex} de ${totalCount}`;
+
+      const controls = $("resultsPaginationControls");
+      let controlsHtml = "";
+
+      controlsHtml += `
+        <button onclick="setResultsPage(${resultsCurrentPage - 1})" class="btn-refresh" style="padding: 4px 8px; border-radius: 4px; font-size:11px;" ${resultsCurrentPage === 1 ? 'disabled style="opacity:0.3; pointer-events:none;"' : ''}>
+          <i class="fa-solid fa-chevron-left"></i>
+        </button>
+      `;
+
+      const startPage = Math.max(1, resultsCurrentPage - 2);
+      const endPage = Math.min(totalPages, startPage + 4);
+      for (let i = startPage; i <= endPage; i++) {
+        const isActive = i === resultsCurrentPage;
+        controlsHtml += `
+          <button onclick="setResultsPage(${i})" class="btn-refresh" style="padding: 4px 10px; border-radius: 4px; font-size:11px; font-weight:${isActive ? '700' : '400'}; border-color:${isActive ? 'var(--accent)' : 'var(--panel-border)'}; color:${isActive ? 'var(--accent)' : 'var(--text-muted)'}; background:${isActive ? 'rgba(255,102,0,0.06)' : 'transparent'};">
+            ${i}
+          </button>
+        `;
+      }
+
+      controlsHtml += `
+        <button onclick="setResultsPage(${resultsCurrentPage + 1})" class="btn-refresh" style="padding: 4px 8px; border-radius: 4px; font-size:11px;" ${resultsCurrentPage === totalPages ? 'disabled style="opacity:0.3; pointer-events:none;"' : ''}>
+          <i class="fa-solid fa-chevron-right"></i>
+        </button>
+      `;
+
+      controls.innerHTML = controlsHtml;
+    }
+
+    function setResultsPage(page) {
+      resultsCurrentPage = page;
+      renderResultsPageTable();
+    }
+
+    function exportHistoryReport() {
+      if (!filteredResultsData.length) {
+        alert("Nenhum dado para exportar.");
+        return;
+      }
+      
+      const headers = ["Horario", "Ativo", "Direcao", "Estrategia", "Resultado", "Lucro"];
+      const csvRows = [headers.join(",")];
+
+      filteredResultsData.forEach(row => {
+        const cleanPattern = (row.motivo || row.pattern || "8 Velas Consecutivas").replace(/,/g, ";");
+        csvRows.push([
+          row.timestamp,
+          row.asset,
+          row.direction,
+          cleanPattern,
+          row.result,
+          row.profit
+        ].join(","));
+      });
+
+      const blob = new Blob([csvRows.join("\n")], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `Relatorio_Operacoes_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
     }
 
     function showSettingsPage() {
@@ -2283,6 +3009,7 @@
         $("navSequences").classList.remove("hidden");
         $("navPairWatch").classList.remove("hidden");
         $("navBroker").classList.remove("hidden");
+        $("navResultados").classList.remove("hidden");
         $("navSettings").classList.remove("hidden");
         $("btnExitSidebar").classList.remove("hidden");
 
@@ -2396,6 +3123,7 @@
       $("navSequences").classList.add("hidden");
       $("navPairWatch").classList.add("hidden");
       $("navBroker").classList.add("hidden");
+      $("navResultados").classList.add("hidden");
       $("navSettings").classList.add("hidden");
       $("btnExitSidebar").classList.add("hidden");
       
@@ -2510,11 +3238,52 @@
         targetX = 100 + radius * Math.cos(angleRad);
         targetY = 100 + radius * Math.sin(angleRad);
 
-        const txt = $("radarTargetText");
+        const dot = $("radarTargetDot");
+        if (dot) {
+          dot.setAttribute("cx", targetX);
+          dot.setAttribute("cy", targetY);
+        }
+
+        const boxWidth = 54;
+        const boxHeight = 11;
+        let boxX = targetX + 18;
+        let boxY = targetY - boxHeight / 2;
         
-        txt.setAttribute("x", targetX + 6);
-        txt.setAttribute("y", targetY + 2.5);
-        txt.textContent = formatAssetName(activeAsset);
+        // Adjust if box goes off right edge of radar (viewBox is 200x200)
+        if (boxX + boxWidth > 195) {
+          boxX = targetX - 18 - boxWidth;
+        }
+
+        const rect = $("radarTargetBox");
+        if (rect) {
+          rect.setAttribute("x", boxX);
+          rect.setAttribute("y", boxY);
+          rect.setAttribute("width", boxWidth);
+          rect.setAttribute("height", boxHeight);
+        }
+
+        const line = $("radarConnectorLine");
+        if (line) {
+          // Connect from dot to nearest edge of the box
+          if (boxX > targetX) {
+            line.setAttribute("x1", targetX);
+            line.setAttribute("y1", targetY);
+            line.setAttribute("x2", boxX);
+            line.setAttribute("y2", targetY);
+          } else {
+            line.setAttribute("x1", targetX);
+            line.setAttribute("y1", targetY);
+            line.setAttribute("x2", boxX + boxWidth);
+            line.setAttribute("y2", targetY);
+          }
+        }
+        
+        const txt = $("radarTargetText");
+        if (txt) {
+          txt.setAttribute("x", boxX + boxWidth / 2);
+          txt.setAttribute("y", boxY + boxHeight / 2 + 0.5);
+          txt.textContent = formatAssetName(activeAsset);
+        }
         
         // Exact sweep angle sync delay (negative delay starts animation phase in-sync instantly)
         const sweepDelay = (angleDeg / 360) * 4;
@@ -2532,10 +3301,25 @@
         const data = await request("/api/state");
         connected = data.connected;
 
-        // Sync connection bars
-        $("connIndicatorDot").className = `status-dot ${data.connected ? 'active' : ''}`;
+        // Sync connection bars and badges
+        const connBadge = document.querySelector(".conn-badge");
+        if (connBadge) {
+          if (data.connected) {
+            connBadge.style.borderColor = "rgba(0, 230, 118, 0.4)";
+            connBadge.style.color = "#00e676";
+            connBadge.style.background = "rgba(0, 230, 118, 0.04)";
+            $("connIndicatorDot").style.backgroundColor = "#00e676";
+            $("connIndicatorDot").style.boxShadow = "0 0 8px #00e676";
+          } else {
+            connBadge.style.borderColor = "rgba(255, 51, 51, 0.3)";
+            connBadge.style.color = "#ff3333";
+            connBadge.style.background = "rgba(255, 51, 51, 0.04)";
+            $("connIndicatorDot").style.backgroundColor = "#ff3333";
+            $("connIndicatorDot").style.boxShadow = "0 0 8px #ff3333";
+          }
+        }
         $("connIndicatorText").textContent = data.connected ? "Conectado" : "Desconectado";
-        $("sysStatusDot").className = `status-dot ${data.running ? 'active' : data.connected ? 'warning' : ''}`;
+        $("sysStatusDot").className = `status-dot ${data.running ? 'active' : ''}`;
         
         let statusText = "Offline";
         if (data.running) {
@@ -2545,8 +3329,9 @@
         }
         $("sysStatusText").textContent = statusText;
 
+        $("sysAccountMode").textContent = data.connected ? (data.account.mode || "DEMO") : "-";
         const accBalance = data.connected ? `${data.account.currency || "$"} ${Number(data.account.balance || 0).toFixed(2)}` : "-";
-        $("sysAccountVal").textContent = data.connected ? `${data.account.mode || "DEMO"} (${accBalance})` : "-";
+        $("sysAccountBalance").textContent = data.connected ? `(${accBalance})` : "-";
 
         if (data.connected) {
           // Hide login, show app
@@ -2555,6 +3340,7 @@
           $("navSequences").classList.remove("hidden");
           $("navPairWatch").classList.remove("hidden");
           $("navBroker").classList.remove("hidden");
+          $("navResultados").classList.remove("hidden");
           $("navSettings").classList.remove("hidden");
           $("btnExitSidebar").classList.remove("hidden");
         } else {
@@ -2564,6 +3350,7 @@
           $("navSequences").classList.add("hidden");
           $("navPairWatch").classList.add("hidden");
           $("navBroker").classList.add("hidden");
+          $("navResultados").classList.add("hidden");
           $("navSettings").classList.add("hidden");
           $("btnExitSidebar").classList.add("hidden");
           if (currentActivePage !== "loginPage") showLogin();
@@ -2631,10 +3418,28 @@
         }
 
         // Detect new finished trade
+        let isNewTrade = false;
         if (data.results && data.results.length > lastTradeCount) {
           const newTrade = data.results[0];
           lastTradeCount = data.results.length;
           triggerResultOverlay(newTrade);
+          isNewTrade = true;
+        }
+
+        // Real-time Results page updates
+        const currentTotal = (data.wins || 0) + (data.losses || 0);
+        let shouldRefreshStats = isNewTrade;
+        if (lastKnownTotalOps !== null && currentTotal !== lastKnownTotalOps) {
+          shouldRefreshStats = true;
+        }
+        lastKnownTotalOps = currentTotal;
+
+        if (currentActivePage === "resultadosPage") {
+          const now = Date.now();
+          if (!window.lastStatsFetchTime || now - window.lastStatsFetchTime > 10000 || shouldRefreshStats) {
+            window.lastStatsFetchTime = now;
+            loadResultsPageData();
+          }
         }
 
         // Toggle state displays
@@ -2709,7 +3514,8 @@
           // Sync Horizontal Scanner Info Bar below Radar
           $("scanAsset").textContent = formatAssetName(data.asset);
           $("scanStrategy").textContent = data.strategy_moment || "-";
-          $("scanProximity").textContent = data.sequence || "-";
+          $("scanStrategyDesc").textContent = data.strategy_moment_detail || "Aguardando formação do padrão...";
+          $("scanStatusText").textContent = data.status || "Procurando Entrada...";
 
           // Trigger single active target draw inside SVG
           updateRadarActiveTarget(data.asset);
@@ -2830,6 +3636,10 @@
     function renderHistoricalTrades(results) {
       if (!results || !results.length) {
         $("resultsRows").innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Nenhuma operação registrada na sessão.</td></tr>`;
+        const sidebarContainer = $("recentOpsSidebarList");
+        if (sidebarContainer) {
+          sidebarContainer.innerHTML = `<div style="text-align: center; padding: 20px; color: var(--text-muted); font-size: 12px;">Nenhuma operação registrada na sessão.</div>`;
+        }
         return;
       }
       
@@ -2838,11 +3648,11 @@
         const dirCls = row.position === "CALL" ? "call" : "put";
         const dirLbl = row.position === "CALL" ? "COMPRA" : "VENDA";
         const profit = Number(row.profit || 0);
-        const motivo = row.motivo || "Estratégia do robô";
+        const motivo = row.motivo || "8 Velas Consecutivas";
         return `
           <tr>
             <td>${row.time || "-"}</td>
-            <td><strong>${row.asset ? row.asset.replace("/", " / ") : "-"}</strong></td>
+            <td><strong>${row.asset ? formatAssetName(row.asset) : "-"}</strong></td>
             <td><span class="badge-dir ${dirCls}">${dirLbl}</span></td>
             <td><span style="font-size: 13px; color: var(--text-muted);">${motivo}</span></td>
             <td>${row.gale || "ENTRADA"}</td>
@@ -2851,6 +3661,31 @@
           </tr>
         `;
       }).join("");
+
+      // Render sidebar recent list (last 5 trades)
+      const sidebarContainer = $("recentOpsSidebarList");
+      if (sidebarContainer) {
+        const recent = results.slice(0, 5);
+        sidebarContainer.innerHTML = recent.map(row => {
+          const isWin = row.result === "WIN";
+          const dirLbl = row.position === "CALL" ? "CALL" : "PUT";
+          const dirColor = row.position === "CALL" ? "#00e676" : "var(--accent)";
+          const dirIcon = row.position === "CALL" ? "fa-arrow-trend-up" : "fa-arrow-trend-down";
+          const profit = Number(row.profit || 0);
+          const profitColor = isWin ? "#00e676" : "var(--accent)";
+          const formattedAsset = formatAssetName(row.asset);
+          return `
+            <div style="display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 12px;">
+              <span style="font-weight: 700; color: #fff;">${formattedAsset}</span>
+              <span style="color: ${dirColor}; font-weight: 700; display: flex; align-items: center; gap: 4px;">
+                ${dirLbl} <i class="fa-solid ${dirIcon}" style="font-size: 10px;"></i>
+              </span>
+              <span style="color: var(--text-muted); font-size: 11px; font-family: monospace;">${row.time || "-"}</span>
+              <strong style="color: ${profitColor}; font-size: 12px;">${profit >= 0 ? '+' : ''}R$ ${profit.toFixed(2)}</strong>
+            </div>
+          `;
+        }).join("");
+      }
     }
 
     function renderPairWatchPage(pairWatch) {
@@ -2951,6 +3786,17 @@
         updateBotActionButtons();
       });
     });
+
+    function toggleAllOpsModal(show) {
+      const modal = $("allOpsModal");
+      if (modal) {
+        if (show) {
+          modal.classList.remove("hidden");
+        } else {
+          modal.classList.add("hidden");
+        }
+      }
+    }
 
     // Start Clock ticking
     setInterval(() => {

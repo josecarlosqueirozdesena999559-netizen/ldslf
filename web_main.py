@@ -1929,6 +1929,146 @@ def api_state():
     return JSONResponse(bot.state())
 
 
+@app.get("/api/history/stats")
+def api_history_stats():
+    try:
+        trades = bot.history.all()
+    except Exception as exc:
+        trades = []
+    
+    # Sort trades by timestamp descending (newest first)
+    def get_timestamp(t):
+        return t.get("timestamp") or ""
+    
+    sorted_trades = sorted(trades, key=get_timestamp, reverse=True)
+    
+    # 1. Net Profit Evolution (Daily profit)
+    daily_profits = {}
+    for trade in trades:
+        ts = trade.get("timestamp")
+        if not ts:
+            continue
+        date_str = ts.split(" ")[0] # YYYY-MM-DD
+        profit = float(trade.get("profit") or 0)
+        daily_profits[date_str] = daily_profits.get(date_str, 0.0) + profit
+        
+    # Get sorted list of dates
+    sorted_dates = sorted(daily_profits.keys())
+    # Keep last 15 dates
+    recent_dates = sorted_dates[-15:] if len(sorted_dates) > 15 else sorted_dates
+    
+    # Calculate cumulative balance starting at 0
+    balance_evolution = []
+    cumulative = 0.0
+    for d in recent_dates:
+        cumulative += daily_profits[d]
+        balance_evolution.append({
+            "date": "/".join(d.split("-")[1:3][::-1]), # DD/MM
+            "profit": round(daily_profits[d], 2),
+            "cumulative": round(cumulative, 2)
+        })
+        
+    # 2. Assertiveness by Strategy
+    strategy_groups = {}
+    for trade in trades:
+        pattern = trade.get("motivo") or trade.get("pattern") or "8 Velas Consecutivas"
+        pattern_lower = pattern.lower()
+        if "8 velas" in pattern_lower or "8 candles" in pattern_lower:
+            pattern = "Estratégia 01"
+        elif "reversao" in pattern_lower or "reversão" in pattern_lower:
+            pattern = "Estratégia 02"
+        elif "ma21" in pattern_lower or "compra no 33" in pattern_lower or "venda no 33" in pattern_lower:
+            pattern = "Estratégia 03"
+        elif "pares 18min" in pattern_lower or "pair watch" in pattern_lower:
+            pattern = "Pares 18min"
+        else:
+            pattern = "Estratégia 04" if "04" in pattern else "Estratégia 05" if "05" in pattern else "Estratégia 01"
+            
+        result = trade.get("result")
+        if result not in {"WIN", "LOSS", "DOJI"}:
+            continue
+            
+        if pattern not in strategy_groups:
+            strategy_groups[pattern] = {"wins": 0, "losses": 0, "total": 0}
+            
+        strategy_groups[pattern]["total"] += 1
+        if result == "WIN":
+            strategy_groups[pattern]["wins"] += 1
+        elif result == "LOSS":
+            strategy_groups[pattern]["losses"] += 1
+
+    strategies_stats = []
+    for pat, s in strategy_groups.items():
+        if s["total"] == 0:
+            continue
+        win_rate = (s["wins"] / s["total"]) * 100
+        strategies_stats.append({
+            "name": pat,
+            "wins": s["wins"],
+            "losses": s["losses"],
+            "total": s["total"],
+            "win_rate": round(win_rate, 2),
+            "loss_rate": round(100 - win_rate, 2)
+        })
+        
+    strategies_best = sorted(strategies_stats, key=lambda x: x["win_rate"], reverse=True)
+    strategies_worst = sorted(strategies_stats, key=lambda x: x["win_rate"])
+    
+    # 3. Heatmap (Weekday vs 2-Hour block)
+    heatmap_grid = {wd: {h: {"wins": 0, "total": 0} for h in range(12)} for wd in range(7)}
+    
+    from datetime import datetime
+    for trade in trades:
+        ts = trade.get("timestamp")
+        result = trade.get("result")
+        if not ts or result not in {"WIN", "LOSS"}:
+            continue
+        try:
+            dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+            wd = dt.weekday() # 0-6
+            hour = dt.hour # 0-23
+            block = hour // 2 # 0-11
+            heatmap_grid[wd][block]["total"] += 1
+            if result == "WIN":
+                heatmap_grid[wd][block]["wins"] += 1
+        except Exception:
+            continue
+            
+    heatmap_data = []
+    for wd in range(7):
+        row_data = []
+        for block in range(12):
+            g = heatmap_grid[wd][block]
+            rate = (g["wins"] / g["total"] * 100) if g["total"] > 0 else 0.0
+            row_data.append({
+                "block": block,
+                "win_rate": round(rate, 2),
+                "total": g["total"]
+            })
+        heatmap_data.append(row_data)
+        
+    # 4. Quantity of Operations by Hour
+    ops_by_hour = [0] * 24
+    for trade in trades:
+        ts = trade.get("timestamp")
+        if not ts:
+            continue
+        try:
+            dt = datetime.strptime(ts, "%Y-%m-%d %H:%M:%S")
+            ops_by_hour[dt.hour] += 1
+        except Exception:
+            continue
+            
+    return JSONResponse({
+        "trades": sorted_trades,
+        "balance_evolution": balance_evolution,
+        "strategies_best": strategies_best,
+        "strategies_worst": strategies_worst,
+        "heatmap": heatmap_data,
+        "ops_by_hour": ops_by_hour
+    })
+
+
 @app.post("/api/results/clear")
 def api_clear_results():
     with bot.lock:
