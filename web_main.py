@@ -561,7 +561,7 @@ class WebBot:
             return 80
         if "estrategia 03" in pattern:
             return 75
-        if "estrategia 05" in pattern:
+        if "estrategia 04" in pattern or "estrategia 05" in pattern:
             return 82
         if "estrategia 01" in pattern:
             return 88
@@ -1442,6 +1442,8 @@ class WebBot:
             return "estrategia 01"
         if "estrategia 03" in pattern:
             return "estrategia 03"
+        if "estrategia 04" in pattern:
+            return "estrategia 04"
         if "estrategia 05" in pattern:
             return "estrategia 05"
         if "velas 5, 6 e 7" in pattern:
@@ -1518,7 +1520,7 @@ class WebBot:
         return {
             "asset": None,
             "title": "Escaneando estrategias sem ordem fixa",
-            "detail": "Estrategia 01, estrategia 03, estrategia 05, MA21 contra, compra/venda no segundo 33, rompimento MA21 aos 33s e pares 18min",
+            "detail": "Estrategia 01, estrategia 03, estrategia 04, estrategia 05, MA21 contra, compra/venda no segundo 33, rompimento MA21 aos 33s e pares 18min",
         }
 
     def state(self) -> dict:
@@ -1573,7 +1575,7 @@ class WebBot:
             "settings_saved": self.settings_saved,
             "account": self.last_account,
             "strategy": "Estrategia 01",
-            "strategy_detail": "Estrategias analisadas sem ordem fixa. 8 candles seguidos + reversao com 2 candles contrarios: entrada contra a tendencia com entrada, G1 e G2. 8 verdes seguidos + 9o candle vermelho + mais 2 vermelhos: entrada CALL com G1 se der loss. Estrategia 05: vermelho, verde, vermelho e verde: proxima vela precisa terminar vermelha, PUT sem reentrada. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde rompe a MA21, termina acima depois de 33s, com apenas 1 ou 2 verdes antes, entrada + G1. Venda no 33: vermelho rompe a MA21 para baixo, termina abaixo depois de 33s, com apenas 1 ou 2 vermelhos antes, entrada PUT + G1. CALL 33 MA21: candle verde rompe a MA21 para cima; candle seguinte fica negativo aos 33s e fecha verde positivo, CALL com entrada + G1. PUT 33 MA21: candle vermelho rompe a MA21 para baixo; candle seguinte fica verde aos 33s e fecha vermelho negativo, PUT com entrada + G1. Pares 18min: 18+ minutos sem 2 candles iguais; nasceu verde CALL, nasceu vermelho PUT.",
+            "strategy_detail": "Estrategias analisadas sem ordem fixa. 8 candles seguidos + reversao com 2 candles contrarios: entrada contra a tendencia com entrada, G1 e G2. 8 verdes seguidos + 9o candle vermelho + mais 2 vermelhos: entrada CALL com G1 se der loss. Estrategia 04: verde, vermelho, verde e vermelho: proxima vela precisa terminar verde, CALL sem reentrada. Estrategia 05: vermelho, verde, vermelho e verde: proxima vela precisa terminar vermelha, PUT sem reentrada. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde rompe a MA21, termina acima depois de 33s, com apenas 1 ou 2 verdes antes, entrada + G1. Venda no 33: vermelho rompe a MA21 para baixo, termina abaixo depois de 33s, com apenas 1 ou 2 vermelhos antes, entrada PUT + G1. CALL 33 MA21: candle verde rompe a MA21 para cima; candle seguinte fica negativo aos 33s e fecha verde positivo, CALL com entrada + G1. PUT 33 MA21: candle vermelho rompe a MA21 para baixo; candle seguinte fica verde aos 33s e fecha vermelho negativo, PUT com entrada + G1. Pares 18min: 18+ minutos sem 2 candles iguais; nasceu verde CALL, nasceu vermelho PUT.",
             "strategy_moment": strategy_moment["title"],
             "strategy_moment_detail": strategy_moment["detail"],
             "target_sequence": self.active_strategy,
@@ -2212,7 +2214,7 @@ HTML = r"""
       $("pausePanel").classList.add("hidden");
       $("analysisPanel").classList.remove("hidden");
       $("asset").textContent = data.asset || "Aguardando ativo";
-      $("sequence").textContent = `EstratÃ©gia do momento: ${data.strategy || "Estrategia 01"} - 8 verdes + 2 vermelhos, estrategia 03, estrategia 04, estrategia 05, MA21, compra/venda no 33 ou pares 18min`;
+      $("sequence").textContent = `EstratÃ©gia do momento: ${data.strategy || "Estrategia 01"} - E04 G/R/G/R CALL sem gale, E05 R/G/R/G PUT sem gale, estrategia 01/03, MA21 ou pares 18min`;
       $("signal").textContent = data.signal ? `Sinal: ${data.signal.direction} (${data.signal.pattern})` : "Sinal: aguardando estrategia";
       const last = data.candles[data.candles.length - 1];
       if (last) {

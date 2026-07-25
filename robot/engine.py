@@ -536,6 +536,8 @@ class RobotEngine:
             return "estrategia 01"
         if "estrategia 03" in pattern:
             return "estrategia 03"
+        if "estrategia 04" in pattern:
+            return "estrategia 04"
         if "estrategia 05" in pattern:
             return "estrategia 05"
         if "velas 5, 6 e 7" in pattern:
@@ -563,7 +565,7 @@ class RobotEngine:
             return 88
         if "comprar no segundo 33" in pattern:
             return 85
-        if "estrategia 05" in pattern:
+        if "estrategia 04" in pattern or "estrategia 05" in pattern:
             return 82
         if "velas 5, 6 e 7" in pattern:
             return 80

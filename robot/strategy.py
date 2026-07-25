@@ -18,6 +18,7 @@ STRATEGY_PATTERN_MARKERS = (
     "estrategia 01",
     "operar contra nas velas 3, 4 e 5",
     "estrategia 03",
+    "estrategia 04",
     "estrategia 05",
     "operar contra tendencia nas velas 5, 6 e 7",
     "comprar no segundo 33",
@@ -349,6 +350,22 @@ def detect_strategy_03_green_reversal_call(asset: Asset) -> tuple[str | None, st
     return "CALL", pattern, reversal_color
 
 
+def detect_strategy_04_green_red_green_red(asset: Asset) -> tuple[str | None, str, str | None]:
+    closed = [candle for candle in asset.candles if candle.closed]
+    if len(closed) < 4:
+        return None, "Estrategia 04 aguarda verde, vermelho, verde, vermelho", None
+
+    colors = [candle_color(candle) for candle in closed[-4:]]
+    if colors != ["GREEN", "RED", "GREEN", "RED"]:
+        return None, "Estrategia 04 aguarda verde, vermelho, verde, vermelho", colors[-1] if colors else None
+
+    pattern = (
+        "Estrategia 04: nasceu verde, vermelho, verde e vermelho; "
+        "proxima vela precisa terminar verde; compra CALL sem reentrada"
+    )
+    return "CALL", pattern, "RED"
+
+
 def detect_strategy_05_red_green_red_green(asset: Asset) -> tuple[str | None, str, str | None]:
     closed = [candle for candle in asset.candles if candle.closed]
     if len(closed) < 4:
@@ -528,6 +545,10 @@ def collect_strategy_signals(asset: Asset) -> list[Signal]:
     direction, pattern, sequence_color = detect_strategy_03_green_reversal_call(asset)
     if direction:
         signals.append(make_signal(asset, direction, pattern, sequence_color, CONTINUATION_WINDOW_SECONDS, max_entries=2))
+
+    direction, pattern, sequence_color = detect_strategy_04_green_red_green_red(asset)
+    if direction:
+        signals.append(make_signal(asset, direction, pattern, sequence_color, REVERSAL_WINDOW_SECONDS, max_entries=1))
 
     direction, pattern, sequence_color = detect_strategy_05_red_green_red_green(asset)
     if direction:

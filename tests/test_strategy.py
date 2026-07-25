@@ -112,6 +112,15 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
         self.assertEqual(generate_signal(self.make_asset(["GREEN"] * 8 + ["RED"] * 2)).direction, "PUT")
         self.assertIsNone(generate_signal(self.make_asset(["GREEN"] * 8 + ["RED"] * 4)))
 
+    def test_strategy_04_green_red_green_red_buys_without_reentry(self) -> None:
+        signal = generate_signal(self.make_asset(["GREEN", "RED", "GREEN", "RED"]))
+
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal.direction, "CALL")
+        self.assertEqual(signal.max_entries, 1)
+        self.assertIn("Estrategia 04", signal.pattern)
+        self.assertEqual(TradeExecutor.direction_for_step(signal, 0), "CALL")
+
     def test_strategy_05_red_green_red_green_sells_without_reentry(self) -> None:
         signal = generate_signal(self.make_asset(["RED", "GREEN", "RED", "GREEN"]))
 
@@ -121,12 +130,7 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
         self.assertIn("Estrategia 05", signal.pattern)
         self.assertEqual(TradeExecutor.direction_for_step(signal, 0), "PUT")
 
-    def test_strategy_05_does_not_buy_green_red_green_red(self) -> None:
-        signal = generate_signal(self.make_asset(["GREEN", "RED", "GREEN", "RED"]))
-
-        self.assertIsNone(signal)
-
-    def test_strategy_05_requires_exact_color_order(self) -> None:
+    def test_strategy_04_and_05_require_exact_color_order(self) -> None:
         signal = generate_signal(self.make_asset(["GREEN", "RED", "RED", "GREEN"]))
 
         self.assertIsNone(signal)
