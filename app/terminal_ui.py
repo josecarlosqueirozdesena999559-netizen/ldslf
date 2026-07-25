@@ -228,7 +228,7 @@ class TerminalUI:
             f"Stop loss: {settings.stop_loss:.2f}\n"
             f"Timeframe: {settings.timeframe}\n"
             f"Payout mínimo: {settings.payout_min}%\n"
-            f"E01: 8V+2R=PUT; E03: 8V+3R=CALL; E04: R G R G=PUT/G1 CALL; E05: G R G R=CALL/G1 PUT"
+            f"E01: 8V+2R=PUT/G2; E03: 8V+3R=CALL/G1; E05: R G R G=PUT sem gale"
         )
         return Panel(body, title="Resumo", border_style="white")
 
@@ -281,13 +281,13 @@ class TerminalUI:
         progress = self._candle_progress(current, settings.timeframe)
         movement = current.close - current.open
         freshness = self._tick_freshness(current)
-        signal_text = f"{signal.direction} na próxima vela" if signal else "aguardando Estratégia 01"
+        signal_text = f"{signal.direction} na proxima vela" if signal else "analisando todas as estrategias"
         trade_text = current_trade or "Nenhuma operação"
         price_style = "bold white on green" if live_color == "GREEN" else "bold white on red" if live_color == "RED" else "bold black on white"
         body = (
             f"[bold]{asset.name}[/bold]   Sequência: [bold]{sequence}[/bold] ({count})   {status}\n"
             f"Operação: [bold]{trade_text}[/bold]\n"
-            f"Sinal: [bold]{signal_text}[/bold]   Gale: [bold]G1 e G2 dobrando[/bold]\n"
+            f"Sinal: [bold]{signal_text}[/bold]   Entradas: [bold]conforme a estrategia[/bold]\n"
             f"{trend_line}\n"
             f"Tempo: {progress}\n\n"
             f"AO VIVO: {self._large_candle_icon(current)}   Preço: [{price_style}] {current.close:.6f} [/]\n"

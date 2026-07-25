@@ -204,6 +204,7 @@ class WebBot:
         self.scheduler_thread: threading.Thread | None = None
         self.operation_open = False
         self.used_signal_keys: set[tuple] = set()
+        self.asset_signal_cooldowns: dict[str, int] = {}
         self.negative_at_33_marks: set[tuple[str, int]] = set()
         self.positive_at_33_marks: set[tuple[str, int]] = set()
         self.last_payout_update = 0.0
@@ -443,6 +444,8 @@ class WebBot:
             signal = generate_signal(asset)
             if not signal:
                 continue
+            if self.is_asset_in_signal_cooldown(asset):
+                continue
             key = self.signal_key(asset, signal)
             if key in self.used_signal_keys:
                 continue
@@ -553,8 +556,6 @@ class WebBot:
             return 80
         if "estrategia 03" in pattern:
             return 75
-        if "estrategia 04" in pattern:
-            return 82
         if "estrategia 05" in pattern:
             return 82
         if "estrategia 01" in pattern:
@@ -572,13 +573,15 @@ class WebBot:
             if asset.open and asset.payout >= self.settings.payout_min:
                 signal = generate_signal(asset)
                 if signal:
+                    if self.is_asset_in_signal_cooldown(asset):
+                        continue
                     key = self.signal_key(asset, signal)
                     if key in self.used_signal_keys:
                         continue
                     signals.append((signal, key))
         if not signals:
             return None
-        signal, key = max(signals, key=lambda item: item[0].payout)
+        signal, key = max(signals, key=lambda item: (self.strategy_priority(item[0]), item[0].payout))
         if mark_used:
             self.used_signal_keys.add(key)
         return signal
@@ -752,6 +755,7 @@ class WebBot:
             if session_token != self.session_token:
                 return
             if trade:
+                self.mark_asset_signal_cooldown(signal)
                 self.add_session_cycle([trade], pattern=signal.pattern)
                 if trade.result == "WIN":
                     self.last_green_time = bullex_now().strftime("%H:%M:%S")
@@ -777,11 +781,13 @@ class WebBot:
                 return
             cycle_trades = self.executor.last_cycle_trades if self.executor else []
             if trade and trade.result == "WIN":
+                self.mark_asset_signal_cooldown(signal)
                 self.add_session_cycle(cycle_trades or [trade], pattern=signal.pattern)
                 self.last_green_time = bullex_now().strftime("%H:%M:%S")
                 self.save_session_score()
                 self.finish_cycle_after_trade()
             elif trade:
+                self.mark_asset_signal_cooldown(signal)
                 self.add_session_cycle(cycle_trades or [trade], pattern=signal.pattern)
                 self.finish_cycle_after_trade()
             else:
@@ -815,6 +821,7 @@ class WebBot:
         self.session_profit = 0.0
         self.session_results = []
         self.used_signal_keys = set()
+        self.asset_signal_cooldowns = {}
         self.pair_watch_states = {}
         self.pair_watch_respected = 0
         self.pair_watch_entries = 0
@@ -1322,7 +1329,8 @@ class WebBot:
 
     @staticmethod
     def is_pair_watch_signal(signal: Signal) -> bool:
-        return (signal.pattern or "").lower().startswith("par de cores atrasado")
+        pattern = (signal.pattern or "").lower()
+        return pattern.startswith("par de cores atrasado") or "minutos sem 2 candles iguais" in pattern
 
     def refresh_account(self) -> None:
         try:
@@ -1377,6 +1385,23 @@ class WebBot:
         if asset:
             return self.signal_key(asset, signal)
         return (signal.asset, signal.direction, signal.pattern, int(signal.timestamp.timestamp()))
+
+    def is_asset_in_signal_cooldown(self, asset: Asset) -> bool:
+        cooldown_timestamp = self.asset_signal_cooldowns.get(asset.name)
+        if not cooldown_timestamp:
+            return False
+        closed = [candle for candle in asset.candles if candle.closed]
+        if not closed:
+            return False
+        return int(closed[-1].timestamp) <= cooldown_timestamp
+
+    def mark_asset_signal_cooldown(self, signal: Signal) -> None:
+        asset = self.asset_by_name(signal.asset)
+        if not asset:
+            return
+        closed = [candle for candle in asset.candles if candle.closed]
+        if closed:
+            self.asset_signal_cooldowns[asset.name] = int(closed[-1].timestamp)
 
     @staticmethod
     def format_seconds(seconds: int) -> str:
@@ -1438,7 +1463,7 @@ class WebBot:
         return {
             "asset": None,
             "title": "Escaneando estrategias sem ordem fixa",
-            "detail": "Estrategia 01, estrategia 03, estrategia 04, estrategia 05, MA21 contra, compra/venda no segundo 33, rompimento MA21 aos 33s e pares 18min",
+            "detail": "Estrategia 01, estrategia 03, estrategia 05, MA21 contra, compra/venda no segundo 33, rompimento MA21 aos 33s e pares 18min",
         }
 
     def state(self) -> dict:
@@ -1493,7 +1518,7 @@ class WebBot:
             "settings_saved": self.settings_saved,
             "account": self.last_account,
             "strategy": "Estrategia 01",
-            "strategy_detail": "Estrategias analisadas sem ordem fixa. 8 verdes seguidos + reversao com 2 vermelhos: entrada PUT contra a tendencia com entrada, G1 e G2. 8 verdes seguidos + 9o candle vermelho + mais 2 vermelhos: entrada CALL com G1 se der loss. Vermelho, verde, vermelho e verde: proxima entrada PUT; se der loss, G1 em CALL. Verde, vermelho, verde e vermelho: proxima entrada CALL; se der loss, G1 em PUT. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde rompe a MA21, termina acima depois de 33s, com apenas 1 ou 2 verdes antes, entrada + G1. Venda no 33: vermelho rompe a MA21 para baixo, termina abaixo depois de 33s, com apenas 1 ou 2 vermelhos antes, entrada PUT + G1. CALL 33 MA21: candle verde rompe a MA21 para cima; candle seguinte fica negativo aos 33s e fecha verde positivo, CALL com entrada + G1. PUT 33 MA21: candle vermelho rompe a MA21 para baixo; candle seguinte fica verde aos 33s e fecha vermelho negativo, PUT com entrada + G1. Pares 18min: 18+ minutos sem 2 candles iguais; nasceu verde CALL, nasceu vermelho PUT.",
+            "strategy_detail": "Estrategias analisadas sem ordem fixa. 8 candles seguidos + reversao com 2 candles contrarios: entrada contra a tendencia com entrada, G1 e G2. 8 verdes seguidos + 9o candle vermelho + mais 2 vermelhos: entrada CALL com G1 se der loss. Estrategia 05: vermelho, verde, vermelho e verde: proxima vela precisa terminar vermelha, PUT sem reentrada. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde rompe a MA21, termina acima depois de 33s, com apenas 1 ou 2 verdes antes, entrada + G1. Venda no 33: vermelho rompe a MA21 para baixo, termina abaixo depois de 33s, com apenas 1 ou 2 vermelhos antes, entrada PUT + G1. CALL 33 MA21: candle verde rompe a MA21 para cima; candle seguinte fica negativo aos 33s e fecha verde positivo, CALL com entrada + G1. PUT 33 MA21: candle vermelho rompe a MA21 para baixo; candle seguinte fica verde aos 33s e fecha vermelho negativo, PUT com entrada + G1. Pares 18min: 18+ minutos sem 2 candles iguais; nasceu verde CALL, nasceu vermelho PUT.",
             "strategy_moment": strategy_moment["title"],
             "strategy_moment_detail": strategy_moment["detail"],
             "target_sequence": self.active_strategy,

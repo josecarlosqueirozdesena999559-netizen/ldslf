@@ -65,8 +65,13 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
     def test_eight_red_in_sequence_does_not_trigger_strategy_01(self) -> None:
         self.assertIsNone(generate_signal(self.make_asset(["RED"] * 8)))
 
-    def test_eight_red_then_two_green_does_not_trigger_strategy_01(self) -> None:
-        self.assertIsNone(generate_signal(self.make_asset(["RED"] * 8 + ["GREEN"] * 2)))
+    def test_eight_red_then_two_green_signals_call_with_g2(self) -> None:
+        signal = generate_signal(self.make_asset(["RED"] * 8 + ["GREEN"] * 2))
+
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal.direction, "CALL")
+        self.assertEqual(signal.max_entries, 3)
+        self.assertIn("Estrategia 01", signal.pattern)
 
     def test_eight_green_then_two_red_signals_put_with_g2(self) -> None:
         signal = generate_signal(self.make_asset(["GREEN"] * 8 + ["RED"] * 2))
@@ -107,31 +112,24 @@ class EightCandleReversalStrategyTests(unittest.TestCase):
         self.assertEqual(generate_signal(self.make_asset(["GREEN"] * 8 + ["RED"] * 2)).direction, "PUT")
         self.assertIsNone(generate_signal(self.make_asset(["GREEN"] * 8 + ["RED"] * 4)))
 
-    def test_strategy_04_red_green_red_green_sells_then_g1_buys(self) -> None:
+    def test_strategy_05_red_green_red_green_sells_without_reentry(self) -> None:
         signal = generate_signal(self.make_asset(["RED", "GREEN", "RED", "GREEN"]))
 
         self.assertIsNotNone(signal)
         self.assertEqual(signal.direction, "PUT")
-        self.assertEqual(signal.max_entries, 2)
-        self.assertIn("Estrategia 04", signal.pattern)
+        self.assertEqual(signal.max_entries, 1)
+        self.assertIn("Estrategia 05", signal.pattern)
         self.assertEqual(TradeExecutor.direction_for_step(signal, 0), "PUT")
-        self.assertEqual(TradeExecutor.direction_for_step(signal, 1), "CALL")
 
-    def test_strategy_04_requires_exact_color_order(self) -> None:
+    def test_strategy_05_does_not_buy_green_red_green_red(self) -> None:
         signal = generate_signal(self.make_asset(["GREEN", "RED", "GREEN", "RED"]))
 
-        self.assertIsNotNone(signal)
-        self.assertIn("Estrategia 05", signal.pattern)
+        self.assertIsNone(signal)
 
-    def test_strategy_05_green_red_green_red_buys_then_g1_sells(self) -> None:
-        signal = generate_signal(self.make_asset(["GREEN", "RED", "GREEN", "RED"]))
+    def test_strategy_05_requires_exact_color_order(self) -> None:
+        signal = generate_signal(self.make_asset(["GREEN", "RED", "RED", "GREEN"]))
 
-        self.assertIsNotNone(signal)
-        self.assertEqual(signal.direction, "CALL")
-        self.assertEqual(signal.max_entries, 2)
-        self.assertIn("Estrategia 05", signal.pattern)
-        self.assertEqual(TradeExecutor.direction_for_step(signal, 0), "CALL")
-        self.assertEqual(TradeExecutor.direction_for_step(signal, 1), "PUT")
+        self.assertIsNone(signal)
 
     def test_red_wickless_below_ma21_then_four_green_signals_put_for_five_six_seven(self) -> None:
         candles = [candle("GREEN", index) for index in range(20)]

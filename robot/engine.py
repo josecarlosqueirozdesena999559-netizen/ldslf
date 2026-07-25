@@ -51,6 +51,7 @@ class RobotEngine:
         self.operation_open = False
         self.operation_lock = threading.Lock()
         self.used_signal_keys: set[tuple] = set()
+        self.asset_signal_cooldowns: dict[str, int] = {}
         self.negative_at_33_marks: set[tuple[str, int]] = set()
         self.positive_at_33_marks: set[tuple[str, int]] = set()
         self.trade_thread: threading.Thread | None = None
@@ -128,6 +129,7 @@ class RobotEngine:
         update_payout = time.time() - self.last_payout_update >= 30
         if update_payout:
             self.last_payout_update = time.time()
+        signals: list[tuple[Signal, tuple]] = []
         for asset in self._ordered_assets_for_update():
             self.update_asset_candles(asset, update_payout)
             self.update_focus_asset()
@@ -137,13 +139,18 @@ class RobotEngine:
             signal = generate_signal(asset)
             if not signal:
                 continue
+            if self.is_asset_in_signal_cooldown(asset):
+                continue
             key = self.signal_key(asset, signal)
             if key in self.used_signal_keys:
                 continue
-            self.used_signal_keys.add(key)
-            self.logger.info("[SIGNAL] %s %s encontrado", signal.asset, signal.direction)
-            return signal
-        return None
+            signals.append((signal, key))
+        if not signals:
+            return None
+        signal, _key = max(signals, key=lambda item: (self.strategy_priority(item[0]), item[0].payout))
+        self.state.focused_asset = signal.asset
+        self.logger.info("[SIGNAL] %s %s encontrado", signal.asset, signal.direction)
+        return signal
 
     def update_asset_candles(self, asset, update_payout: bool) -> None:
         try:
@@ -216,13 +223,15 @@ class RobotEngine:
                 continue
             signal = generate_signal(asset)
             if signal:
+                if self.is_asset_in_signal_cooldown(asset):
+                    continue
                 key = self.signal_key(asset, signal)
                 if key in self.used_signal_keys:
                     continue
                 signals.append((signal, key))
         if not signals:
             return None
-        best, key = max(signals, key=lambda item: item[0].payout)
+        best, key = max(signals, key=lambda item: (self.strategy_priority(item[0]), item[0].payout))
         if mark_used:
             self.used_signal_keys.add(key)
         self.logger.info("[SIGNAL] %s %s encontrado", best.asset, best.direction)
@@ -412,6 +421,7 @@ class RobotEngine:
                 self.state.status = f"Bloqueado: estrategia nao permitida ({signal.pattern})"
                 self.executor.current_trade = self.state.status
                 return
+            self.used_signal_keys.add(self.signal_key_for_signal(signal))
             self.state.focused_asset = signal.asset
             self.operation_open = True
         self.state.status = f"Operando: {signal.pattern}"
@@ -431,6 +441,7 @@ class RobotEngine:
     def execute_pair_watch_trade(self, signal: Signal) -> None:
         try:
             self.executor.execute_single(signal, self.settings, self.account_mode, "PAR ATRASADO")
+            self.mark_asset_signal_cooldown(signal)
             self.state.status = (
                 f"Monitorando pares de cores: limite {self.settings.pair_watch_minutes} minutos"
             )
@@ -443,6 +454,8 @@ class RobotEngine:
             trade = self.executor.execute_cycle(signal, self.settings, self.account_mode)
             if trade and trade.result == "WIN":
                 self.last_green_time = time.strftime("%H:%M:%S")
+            if trade:
+                self.mark_asset_signal_cooldown(signal)
             self.reset_scan_timer()
             self.state.status = "Escaneando ativos em tempo real / aguardando sinal"
         finally:
@@ -455,13 +468,58 @@ class RobotEngine:
 
     @staticmethod
     def is_pair_watch_signal(signal: Signal) -> bool:
-        return (signal.pattern or "").lower().startswith("par de cores atrasado")
+        pattern = (signal.pattern or "").lower()
+        return pattern.startswith("par de cores atrasado") or "minutos sem 2 candles iguais" in pattern
 
     @staticmethod
     def signal_key(asset, signal: Signal) -> tuple:
         closed = [candle for candle in asset.candles if candle.closed]
         last_timestamp = int(closed[-1].timestamp) if closed else 0
         return (asset.name, signal.direction, signal.pattern, last_timestamp)
+
+    def signal_key_for_signal(self, signal: Signal) -> tuple:
+        asset = self._asset_by_name(signal.asset)
+        if asset:
+            return self.signal_key(asset, signal)
+        return (signal.asset, signal.direction, signal.pattern, int(signal.timestamp.timestamp()))
+
+    def is_asset_in_signal_cooldown(self, asset) -> bool:
+        cooldown_timestamp = self.asset_signal_cooldowns.get(asset.name)
+        if not cooldown_timestamp:
+            return False
+        closed = [candle for candle in asset.candles if candle.closed]
+        if not closed:
+            return False
+        return int(closed[-1].timestamp) <= cooldown_timestamp
+
+    def mark_asset_signal_cooldown(self, signal: Signal) -> None:
+        asset = self._asset_by_name(signal.asset)
+        if not asset:
+            return
+        closed = [candle for candle in asset.candles if candle.closed]
+        if closed:
+            self.asset_signal_cooldowns[asset.name] = int(closed[-1].timestamp)
+
+    @staticmethod
+    def strategy_priority(signal: Signal) -> int:
+        pattern = (signal.pattern or "").lower()
+        if "minutos sem 2 candles iguais" in pattern or "par de cores atrasado" in pattern:
+            return 95
+        if "rompeu a ma21" in pattern:
+            return 90
+        if "estrategia 01" in pattern:
+            return 88
+        if "comprar no segundo 33" in pattern:
+            return 85
+        if "estrategia 05" in pattern:
+            return 82
+        if "velas 5, 6 e 7" in pattern:
+            return 80
+        if "estrategia 03" in pattern:
+            return 75
+        if "velas 3, 4 e 5" in pattern:
+            return 70
+        return 50
 
     def update_live_panels(self):
         account = account_snapshot(self.client)
