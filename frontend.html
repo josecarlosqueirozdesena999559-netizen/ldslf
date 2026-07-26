@@ -775,7 +775,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: 340px;
+      padding: 10px 0;
       animation: fadeIn 0.4s ease;
     }
 
@@ -786,14 +786,14 @@
 
     .entry-badge-status {
       font-family: var(--font-title);
-      font-size: 12px;
+      font-size: 10px;
       font-weight: 700;
       color: var(--accent);
       background: rgba(255, 102, 0, 0.08);
       border: 1px solid rgba(255, 102, 0, 0.2);
-      padding: 6px 14px;
+      padding: 4px 10px;
       border-radius: 20px;
-      margin-bottom: 16px;
+      margin-bottom: 10px;
       letter-spacing: 1px;
       text-transform: uppercase;
       animation: pulse 1.5s infinite;
@@ -801,22 +801,22 @@
 
     .entry-asset-name {
       font-family: var(--font-title);
-      font-size: 36px;
+      font-size: 26px;
       font-weight: 800;
       letter-spacing: -0.5px;
-      margin-bottom: 10px;
+      margin-bottom: 6px;
     }
 
     .entry-direction {
       display: inline-flex;
       align-items: center;
-      gap: 10px;
-      padding: 7px 16px;
+      gap: 8px;
+      padding: 5px 12px;
       border-radius: 8px;
       font-family: var(--font-title);
-      font-size: 18px;
+      font-size: 13px;
       font-weight: 700;
-      margin-bottom: 18px;
+      margin-bottom: 12px;
       text-transform: uppercase;
     }
 
@@ -835,18 +835,18 @@
     .entry-details-grid {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
+      gap: 8px;
       width: 100%;
-      max-width: 520px;
-      margin-top: 6px;
+      max-width: 480px;
+      margin-top: 4px;
     }
 
     .entry-detail-card {
-      background: rgba(26, 26, 36, 0.3);
+      background: rgba(26, 26, 36, 0.45);
       border: 1px solid var(--panel-border);
-      border-radius: 10px;
-      padding: 12px;
-      min-height: 92px;
+      border-radius: 8px;
+      padding: 8px;
+      min-height: 54px;
       display: flex;
       flex-direction: column;
       justify-content: center;
@@ -855,24 +855,24 @@
     .entry-detail-card span {
       display: block;
       color: var(--text-muted);
-      font-size: 10px;
+      font-size: 9px;
       text-transform: uppercase;
       font-weight: 600;
       letter-spacing: 0.5px;
-      margin-bottom: 5px;
+      margin-bottom: 3px;
     }
 
     .entry-detail-card strong {
       font-family: var(--font-title);
-      font-size: 16px;
+      font-size: 12px;
       font-weight: 700;
       color: var(--text);
       line-height: 1.25;
     }
 
     .entry-gale-warning {
-      margin-top: 14px;
-      font-size: 13px;
+      margin-top: 10px;
+      font-size: 11px;
       color: var(--accent);
       font-weight: 500;
       display: flex;
@@ -886,7 +886,7 @@
       flex-direction: column;
       align-items: center;
       justify-content: center;
-      min-height: 280px;
+      padding: 10px 0;
       width: 100%;
       animation: zoomIn 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
     }
@@ -897,60 +897,60 @@
     }
 
     .result-icon-wrap {
-      width: 64px;
-      height: 64px;
+      width: 48px;
+      height: 48px;
       border-radius: 50%;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 26px;
-      margin-bottom: 12px;
-      box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+      font-size: 20px;
+      margin-bottom: 8px;
+      box-shadow: 0 4px 12px rgba(0,0,0,0.3);
     }
 
     .result-overlay-panel.win .result-icon-wrap {
       background: var(--green-glow);
       color: var(--green);
       border: 2px solid var(--green);
-      box-shadow: 0 0 15px var(--green-glow);
+      box-shadow: 0 0 12px var(--green-glow);
     }
 
     .result-overlay-panel.loss .result-icon-wrap {
       background: rgba(255, 102, 0, 0.08);
       color: var(--accent);
       border: 2px solid var(--accent);
-      box-shadow: 0 0 15px var(--accent-glow);
+      box-shadow: 0 0 12px var(--accent-glow);
     }
 
     .result-header-text {
       font-family: var(--font-title);
-      font-size: 24px;
+      font-size: 20px;
       font-weight: 800;
       letter-spacing: -0.5px;
-      margin-bottom: 6px;
+      margin-bottom: 4px;
     }
 
     .result-overlay-panel.win .result-header-text {
       color: var(--green);
-      text-shadow: 0 0 10px rgba(0, 230, 118, 0.2);
+      text-shadow: 0 0 8px rgba(0, 230, 118, 0.2);
     }
 
     .result-overlay-panel.loss .result-header-text {
       color: var(--accent);
-      text-shadow: 0 0 10px rgba(255, 102, 0, 0.2);
+      text-shadow: 0 0 8px rgba(255, 102, 0, 0.2);
     }
 
     .result-sub-text {
       font-family: var(--font-title);
-      font-size: 14px;
+      font-size: 12px;
       font-weight: 600;
       color: var(--text-muted);
-      margin-bottom: 4px;
+      margin-bottom: 2px;
     }
 
     .result-profit-text {
       font-family: var(--font-title);
-      font-size: 18px;
+      font-size: 16px;
       font-weight: 700;
     }
 
@@ -1731,7 +1731,7 @@
           
           <div class="dashboard-grid">
             <!-- Left Column: Active Radar / Entry Panel -->
-            <div id="radarCardPanel" class="panel" style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 380px; padding: 15px; transition: all 0.5s ease;">
+            <div id="radarCardPanel" class="panel" style="display: flex; flex-direction: column; justify-content: center; align-items: center; min-height: 360px; padding: 18px; transition: all 0.5s ease;">
               
               <!-- SUB-STATE 1: Radar (Scanning) -->
               <div id="radarStatePanel" class="radar-panel-scanning" style="width: 100%;">
@@ -1886,7 +1886,7 @@
             </div>
 
                    <!-- Right Column: Unified Performance & Results Sidebar -->
-            <div class="panel" style="display: flex; flex-direction: column; gap: 12px; min-height: 380px; padding: 15px; background: rgba(18, 18, 26, 0.45); border: 1px solid var(--panel-border); border-radius: 16px;">
+            <div class="panel" style="display: flex; flex-direction: column; gap: 20px; min-height: 460px; padding: 20px; background: rgba(18, 18, 26, 0.45); border: 1px solid var(--panel-border); border-radius: 16px;">
               <!-- Header -->
               <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.05); padding-bottom: 12px;">
                 <h2 style="font-family: var(--font-title); font-size: 15px; font-weight: 800; letter-spacing: 1px; color: #fff; margin: 0; text-transform: uppercase;">Resultados</h2>
@@ -2235,7 +2235,7 @@
           <div style="display: flex; gap: 12px; align-items: center;">
             <div style="display: flex; align-items: center; gap: 8px; background: #0c0c12; border: 1px solid var(--panel-border); padding: 8px 14px; border-radius: 8px; font-size: 13px; color: var(--text-muted); cursor: pointer;" onmouseover="this.style.borderColor='var(--accent)'" onmouseout="this.style.borderColor='var(--panel-border)'">
               <i class="fa-regular fa-calendar"></i>
-              <span id="resultsDateRange" style="font-weight: 600; color: #fff;">Últimos 15 Dias</span>
+              <span id="resultsDateRange" style="font-weight: 600; color: #fff;">Hoje</span>
               <i class="fa-solid fa-chevron-down" style="font-size: 10px;"></i>
             </div>
             <button onclick="exportHistoryReport()" class="btn-refresh" style="font-size: 13px; padding: 9px 16px; border-radius: 8px; color: #fff; background: rgba(255, 102, 0, 0.1); border-color: rgba(255, 102, 0, 0.3); display: flex; align-items: center; gap: 8px; font-weight: 600;" onmouseover="this.style.background='var(--accent)'" onmouseout="this.style.background='rgba(255, 102, 0, 0.1)'">
@@ -2318,6 +2318,9 @@
           <!-- Card 2: Operations by Hour Bar Chart -->
           <div class="panel" style="display: flex; flex-direction: column; padding: 20px; justify-content: space-between;">
             <h3 class="panel-title" style="margin-bottom: 15px; font-size: 13px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted);"><i class="fa-solid fa-chart-simple" style="color: var(--accent); margin-right: 5px;"></i> Quantidade de Operações por Horário</h3>
+            <select id="opsByHourDayFilter" onchange="setOpsByHourDay(this.value)" class="input-field" style="width: 150px; height: 30px; font-size: 11px; padding: 0 8px; border-radius: 6px; background: #0c0c12; margin-bottom: 10px;">
+              <option value="">Hoje</option>
+            </select>
             <div style="width: 100%; height: 200px; position: relative;">
               <canvas id="opsByHourChart"></canvas>
             </div>
@@ -2342,12 +2345,6 @@
               <!-- Filter: Strategy -->
               <select id="resultsFilterStrategy" onchange="applyResultsFilters()" class="input-field" style="width: 140px; height: 32px; font-size: 11px; padding: 0 8px; border-radius: 6px; background: #0c0c12;">
                 <option value="ALL">Todas Estratégias</option>
-                <option value="Estratégia 01">Estratégia 01</option>
-                <option value="Estratégia 02">Estratégia 02</option>
-                <option value="Estratégia 03">Estratégia 03</option>
-                <option value="Estratégia 04">Estratégia 04</option>
-                <option value="Estratégia 05">Estratégia 05</option>
-                <option value="Pares 18min">Pares 18min</option>
               </select>
 
               <!-- Filter: Type -->
@@ -2529,6 +2526,7 @@
     let opsByHourChartInstance = null;
     let resultsHistoryData = [];
     let filteredResultsData = [];
+    let selectedOpsDay = "";
     let resultsCurrentPage = 1;
     const resultsPageSize = 10;
 
@@ -2544,7 +2542,8 @@
 
     async function loadResultsPageData() {
       try {
-        const data = await request("/api/history/stats");
+        const query = selectedOpsDay ? `?day=${encodeURIComponent(selectedOpsDay)}` : "";
+        const data = await request(`/api/history/stats${query}`);
         if (!data) return;
 
         resultsHistoryData = data.trades || [];
@@ -2560,6 +2559,34 @@
             opt.textContent = formatAssetName(asset);
             assetsFilter.appendChild(opt);
           });
+        }
+
+        const strategyFilter = $("resultsFilterStrategy");
+        if (strategyFilter) {
+          const currentStrategy = strategyFilter.value || "ALL";
+          strategyFilter.innerHTML = '<option value="ALL">Todas Estrategias</option>';
+          const uniqueStrategies = [...new Set(resultsHistoryData.map(resultStrategyName).filter(Boolean))].sort();
+          uniqueStrategies.forEach(strategy => {
+            const opt = document.createElement("option");
+            opt.value = strategy;
+            opt.textContent = strategy;
+            strategyFilter.appendChild(opt);
+          });
+          strategyFilter.value = uniqueStrategies.includes(currentStrategy) ? currentStrategy : "ALL";
+        }
+
+        const dayFilter = $("opsByHourDayFilter");
+        if (dayFilter) {
+          const currentValue = selectedOpsDay;
+          dayFilter.innerHTML = '<option value="">Hoje</option>';
+          (data.available_days || []).forEach(day => {
+            const opt = document.createElement("option");
+            opt.value = day;
+            const parts = day.split("-");
+            opt.textContent = parts.length === 3 ? `${parts[2]}/${parts[1]}/${parts[0]}` : day;
+            dayFilter.appendChild(opt);
+          });
+          dayFilter.value = currentValue;
         }
 
         // Apply filters initially
@@ -2587,6 +2614,11 @@
       } catch (err) {
         console.error("Erro ao carregar dados do dashboard de estatísticas:", err);
       }
+    }
+
+    async function setOpsByHourDay(day) {
+      selectedOpsDay = day || "";
+      await loadResultsPageData();
     }
 
     function renderProfitEvolutionChart(evolution) {
@@ -2777,6 +2809,15 @@
       }).join("");
     }
 
+    function resultStrategyName(trade) {
+      return trade.strategy_name || "Sem estrategia registrada";
+    }
+
+    function setResultsPage(page) {
+      resultsCurrentPage = page;
+      renderResultsPageTable();
+    }
+
     function applyResultsFilters() {
       const assetVal = $("resultsFilterAsset").value;
       const strategyVal = $("resultsFilterStrategy").value;
@@ -2786,34 +2827,20 @@
 
       filteredResultsData = resultsHistoryData.filter(trade => {
         if (assetVal !== "ALL" && trade.asset !== assetVal) return false;
-        
-        if (strategyVal !== "ALL") {
-          const pattern = String(trade.motivo || trade.pattern || "8 Velas Consecutivas");
-          const pattern_lower = pattern.toLowerCase();
-          
-          let tradeStrat = "";
-          if (pattern_lower.includes("8 velas") || pattern_lower.includes("8 candles")) tradeStrat = "Estratégia 01";
-          else if (pattern_lower.includes("reversao") || pattern_lower.includes("reversão")) tradeStrat = "Estratégia 02";
-          else if (pattern_lower.includes("ma21") || pattern_lower.includes("compra no 33") || pattern_lower.includes("venda no 33")) tradeStrat = "Estratégia 03";
-          else if (pattern_lower.includes("pares 18min") || pattern_lower.includes("pair watch")) tradeStrat = "Pares 18min";
-          else tradeStrat = pattern.includes("04") ? "Estratégia 04" : pattern.includes("05") ? "Estratégia 05" : "Estratégia 01";
-
-          if (tradeStrat !== strategyVal) return false;
-        }
-
-        const dir = trade.direction || trade.position || "CALL";
+        if (strategyVal !== "ALL" && resultStrategyName(trade) !== strategyVal) return false;
+        const dir = trade.direction || trade.position || "";
         if (typeVal !== "ALL" && dir !== typeVal) return false;
         if (outcomeVal !== "ALL" && trade.result !== outcomeVal) return false;
 
         if (searchVal) {
-          const assetName = (trade.asset || "").toLowerCase();
-          const timestamp = (trade.timestamp || "").toLowerCase();
-          const motivo = String(trade.motivo || trade.pattern || "").toLowerCase();
-          if (!assetName.includes(searchVal) && !timestamp.includes(searchVal) && !motivo.includes(searchVal)) {
-            return false;
-          }
+          const text = [
+            trade.asset || "",
+            trade.timestamp || trade.time || "",
+            trade.pattern || trade.motivo || "",
+            resultStrategyName(trade),
+          ].join(" ").toLowerCase();
+          if (!text.includes(searchVal)) return false;
         }
-
         return true;
       });
 
@@ -2826,7 +2853,7 @@
       if (!container) return;
 
       if (!filteredResultsData.length) {
-        container.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">Nenhuma operação encontrada com os filtros selecionados.</td></tr>`;
+        container.innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted); padding: 30px;">Nenhuma operacao encontrada com os filtros selecionados.</td></tr>`;
         $("resultsPaginationInfo").textContent = "Mostrando 0 - 0 de 0";
         $("resultsPaginationControls").innerHTML = "";
         return;
@@ -2834,31 +2861,21 @@
 
       const totalCount = filteredResultsData.length;
       const totalPages = Math.ceil(totalCount / resultsPageSize);
-      
       if (resultsCurrentPage > totalPages) resultsCurrentPage = totalPages;
       if (resultsCurrentPage < 1) resultsCurrentPage = 1;
 
       const startIndex = (resultsCurrentPage - 1) * resultsPageSize;
       const endIndex = Math.min(startIndex + resultsPageSize, totalCount);
-
       const paginatedData = filteredResultsData.slice(startIndex, endIndex);
 
       container.innerHTML = paginatedData.map(row => {
         const isWin = row.result === "WIN";
-        const dir = row.direction || row.position || "CALL";
+        const dir = row.direction || row.position || "";
         const dirCls = dir === "CALL" ? "call" : "put";
-        const dirLbl = dir === "CALL" ? "COMPRA" : "VENDA";
+        const dirLbl = dir === "CALL" ? "COMPRA" : dir === "PUT" ? "VENDA" : "-";
         const dirIcon = dir === "CALL" ? "fa-arrow-up" : "fa-arrow-down";
         const profit = Number(row.profit || 0);
-
-        const pattern = String(row.motivo || row.pattern || "8 Velas Consecutivas");
-        const pattern_lower = pattern.toLowerCase();
-        let displayStrat = "Estratégia 01";
-        if (pattern_lower.includes("8 velas") || pattern_lower.includes("8 candles")) displayStrat = "Estratégia 01";
-        else if (pattern_lower.includes("reversao") || pattern_lower.includes("reversão")) displayStrat = "Estratégia 02";
-        else if (pattern_lower.includes("ma21") || pattern_lower.includes("compra no 33") || pattern_lower.includes("venda no 33")) displayStrat = "Estratégia 03";
-        else if (pattern_lower.includes("pares 18min") || pattern_lower.includes("pair watch")) displayStrat = "Pares 18min";
-        else displayStrat = pattern.includes("04") ? "Estratégia 04" : pattern.includes("05") ? "Estratégia 05" : "Estratégia 01";
+        const strategy = resultStrategyName(row);
 
         return `
           <tr>
@@ -2869,8 +2886,8 @@
                 ${dirLbl} <i class="fa-solid ${dirIcon}" style="font-size: 10px;"></i>
               </span>
             </td>
-            <td><span style="font-size: 12px; font-weight:600; color: #fff;">${displayStrat}</span></td>
-            <td>1 Min</td>
+            <td><span style="font-size: 12px; font-weight:600; color: #fff;" title="${row.pattern || row.motivo || strategy}">${strategy}</span></td>
+            <td>${row.timeframe || "1 Min"}</td>
             <td><span class="badge-result ${isWin ? 'win' : 'loss'}" style="width:55px; text-align:center; height:22px; font-weight:700;">${row.result || "-"}</span></td>
             <td><strong class="${profit >= 0 ? 'green' : 'red'}" style="font-size:13px;">${profit >= 0 ? '+' : ''}R$ ${profit.toFixed(2)}</strong></td>
           </tr>
@@ -2878,16 +2895,12 @@
       }).join("");
 
       $("resultsPaginationInfo").textContent = `Mostrando ${startIndex + 1} - ${endIndex} de ${totalCount}`;
-
       const controls = $("resultsPaginationControls");
-      let controlsHtml = "";
-
-      controlsHtml += `
+      let controlsHtml = `
         <button onclick="setResultsPage(${resultsCurrentPage - 1})" class="btn-refresh" style="padding: 4px 8px; border-radius: 4px; font-size:11px;" ${resultsCurrentPage === 1 ? 'disabled style="opacity:0.3; pointer-events:none;"' : ''}>
           <i class="fa-solid fa-chevron-left"></i>
         </button>
       `;
-
       const startPage = Math.max(1, resultsCurrentPage - 2);
       const endPage = Math.min(totalPages, startPage + 4);
       for (let i = startPage; i <= endPage; i++) {
@@ -2898,19 +2911,12 @@
           </button>
         `;
       }
-
       controlsHtml += `
         <button onclick="setResultsPage(${resultsCurrentPage + 1})" class="btn-refresh" style="padding: 4px 8px; border-radius: 4px; font-size:11px;" ${resultsCurrentPage === totalPages ? 'disabled style="opacity:0.3; pointer-events:none;"' : ''}>
           <i class="fa-solid fa-chevron-right"></i>
         </button>
       `;
-
       controls.innerHTML = controlsHtml;
-    }
-
-    function setResultsPage(page) {
-      resultsCurrentPage = page;
-      renderResultsPageTable();
     }
 
     function exportHistoryReport() {
@@ -2923,7 +2929,7 @@
       const csvRows = [headers.join(",")];
 
       filteredResultsData.forEach(row => {
-        const cleanPattern = (row.motivo || row.pattern || "8 Velas Consecutivas").replace(/,/g, ";");
+        const cleanPattern = resultStrategyName(row).replace(/,/g, ";");
         csvRows.push([
           row.timestamp,
           row.asset,
@@ -3463,10 +3469,16 @@
           $("radarStatePanel").classList.add("hidden");
           $("entryStatePanel").classList.add("hidden");
           $("resultStatePanel").classList.remove("hidden");
+          if (cardPanel) {
+            cardPanel.style.minHeight = "240px";
+          }
         } else if (data.operation_open) {
           $("radarStatePanel").classList.add("hidden");
           $("entryStatePanel").classList.remove("hidden");
           $("resultStatePanel").classList.add("hidden");
+          if (cardPanel) {
+            cardPanel.style.minHeight = "280px";
+          }
           
           // Toggle neon card pulse based on trade direction
           if (cardPanel) {
@@ -3490,26 +3502,34 @@
           
           // Timeframe/Expiration
           const expirationVal = data.settings?.timeframe || "M1";
-          $("entryExpiration").textContent = expirationVal === "M1" ? "1 Minuto" : expirationVal === "M5" ? "5 Minutos" : expirationVal;
+          const expEl = $("entryExpiration");
+          if (expEl) {
+            expEl.textContent = expirationVal === "M1" ? "1 Minuto" : expirationVal === "M5" ? "5 Minutos" : expirationVal;
+          }
           
           // Direction styling
           const tradeMsg = String(data.trade || "").toUpperCase();
           const isPut = tradeMsg.includes("PUT") || tradeMsg.includes("VENDA");
           const isCall = tradeMsg.includes("CALL") || tradeMsg.includes("COMPRA");
-          
-          if (isPut) {
-            $("entryDirection").className = "entry-direction put";
-            $("entryDirection").innerHTML = '<i class="fa-solid fa-arrow-trend-down"></i> VENDA / PUT';
-          } else if (isCall) {
-            $("entryDirection").className = "entry-direction call";
-            $("entryDirection").innerHTML = '<i class="fa-solid fa-arrow-trend-up"></i> COMPRA / CALL';
-          } else {
-            $("entryDirection").className = "entry-direction call";
-            $("entryDirection").textContent = data.trade || "ANALISANDO";
+          const dirEl = $("entryDirection");
+          if (dirEl) {
+            if (isPut) {
+              dirEl.className = "entry-direction put";
+              dirEl.innerHTML = '<i class="fa-solid fa-arrow-trend-down"></i> VENDA / PUT';
+            } else if (isCall) {
+              dirEl.className = "entry-direction call";
+              dirEl.innerHTML = '<i class="fa-solid fa-arrow-trend-up"></i> COMPRA / CALL';
+            } else {
+              dirEl.className = "entry-direction call";
+              dirEl.textContent = data.trade || "ANALISANDO";
+            }
           }
 
           $("entryStatusVal").textContent = compactStatusText(data.trade || "Enviando...");
-          $("entryLoaderText").textContent = entryLoaderText(data.trade || "");
+          const loaderTextEl = $("entryLoaderText");
+          if (loaderTextEl) {
+            loaderTextEl.textContent = entryLoaderText(data.trade || "");
+          }
           
           // G1 Martingale notice
           if (tradeMsg.includes("G1")) {
@@ -3521,6 +3541,9 @@
           $("radarStatePanel").classList.remove("hidden");
           $("entryStatePanel").classList.add("hidden");
           $("resultStatePanel").classList.add("hidden");
+          if (cardPanel) {
+            cardPanel.style.minHeight = "360px";
+          }
 
           // Sync Horizontal Scanner Info Bar below Radar
           $("scanAsset").textContent = formatAssetName(data.asset);
@@ -3603,15 +3626,14 @@
       
       const isWin = trade.result === "WIN";
       const panel = $("resultStatePanel");
-      
-      panel.className = `result-overlay-panel ${isWin ? 'win' : 'loss'}`;
-      $("resultIcon").className = isWin ? "fa-solid fa-trophy" : "fa-solid fa-circle-xmark";
-      $("resultHeader").textContent = isWin ? "WIN ENCONTRADO!" : "LOSS REGISTRADO";
-      $("resultSub").textContent = `${formatAssetName(trade.asset)} • ${trade.gale || 'ENTRADA'}`;
-      
-      const profit = Number(trade.profit || 0);
-      $("resultProfit").textContent = `${profit >= 0 ? '+' : ''}R$ ${profit.toFixed(2)}`;
-      $("resultProfit").className = `result-profit-text ${isWin ? 'green' : 'red'}`;
+      if (panel) {
+        panel.className = `result-panel-mini ${isWin ? 'win' : 'loss'}`;
+        $("resultHeader").textContent = isWin ? "WIN" : "LOSS";
+        $("resultSub").textContent = `${formatAssetName(trade.asset)} • ${trade.gale || 'ENTRADA'}`;
+        
+        const profit = Number(trade.profit || 0);
+        $("resultProfit").textContent = `${profit >= 0 ? '+' : ''}R$ ${profit.toFixed(2)}`;
+      }
 
       resultOverlayTimeout = setTimeout(() => {
         resultOverlayTimeout = null;
@@ -3659,7 +3681,7 @@
         const dirCls = row.position === "CALL" ? "call" : "put";
         const dirLbl = row.position === "CALL" ? "COMPRA" : "VENDA";
         const profit = Number(row.profit || 0);
-        const motivo = row.motivo || "8 Velas Consecutivas";
+        const motivo = row.motivo || row.pattern || "Sem estrategia registrada";
         return `
           <tr>
             <td>${row.time || "-"}</td>
@@ -3836,3 +3858,4 @@
   </script>
 </body>
 </html>
+

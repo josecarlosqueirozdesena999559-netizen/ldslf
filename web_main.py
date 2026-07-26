@@ -46,6 +46,10 @@ def bullex_now() -> datetime:
     return datetime.now(BULLEX_TIMEZONE)
 
 
+def today_key() -> str:
+    return bullex_now().strftime("%Y-%m-%d")
+
+
 class LoginPayload(BaseModel):
     email: str
     password: str
@@ -195,7 +199,7 @@ class WebBot:
         self.starting = False
         self.auto_trade = True
         self.manual_paused = False
-        self.active_strategy = "Estrategia 01"
+        self.active_strategy = "Todas estrategias"
         self.next_strategy = "Monitorando todas as estrategias sem ordem fixa: 8 verdes + reversoes, padroes alternados, MA21 compra/venda 33s e pares 18min"
         self.schedule_enabled = False
         self.schedule_start = ""
@@ -288,7 +292,7 @@ class WebBot:
             self.starting = True
             self.manual_paused = False
             self.auto_trade = auto_trade
-            self.active_strategy = "Estrategia 01"
+            self.active_strategy = "Todas estrategias"
             self.next_strategy = "Monitorando todas as estrategias sem ordem fixa: 8 verdes + reversoes, padroes alternados, MA21 compra/venda 33s e pares 18min"
             self.status = "Carregando ativos"
 
@@ -892,7 +896,7 @@ class WebBot:
             self.running = False
             return
         self.next_strategy = "Monitorando todas as estrategias sem ordem fixa: 8 verdes + reversoes, padroes alternados, MA21 compra/venda 33s e pares 18min"
-        self.active_strategy = "Estrategia 01"
+        self.active_strategy = "Todas estrategias"
         self.status = "Escaneando ativos em tempo real / aguardando sinal"
 
     def start_scheduler(self) -> None:
@@ -1035,6 +1039,9 @@ class WebBot:
         self.apply_session_score_data(data)
 
     def apply_session_score_data(self, data: dict) -> None:
+        if str(data.get("date") or "") != today_key():
+            self.reset_session_stats()
+            return
         self.session_wins = int(data.get("wins", self.session_wins))
         self.session_losses = int(data.get("losses", self.session_losses))
         self.session_profit = float(data.get("profit", self.session_profit))
@@ -1045,6 +1052,7 @@ class WebBot:
 
     def save_session_score(self) -> None:
         data = {
+            "date": today_key(),
             "wins": self.session_wins,
             "losses": self.session_losses,
             "profit": self.session_profit,
@@ -1574,7 +1582,7 @@ class WebBot:
             "manual_paused": self.manual_paused,
             "settings_saved": self.settings_saved,
             "account": self.last_account,
-            "strategy": "Estrategia 01",
+            "strategy": "Todas estrategias",
             "strategy_detail": "Estrategias analisadas sem ordem fixa. 8 candles seguidos + reversao com 2 candles contrarios: entrada contra a tendencia com entrada, G1 e G2. 8 verdes seguidos + 9o candle vermelho + mais 2 vermelhos: entrada CALL com G1 se der loss. Estrategia 04: verde, vermelho, verde e vermelho; ultimo candle terminou vermelho, CALL compra sem reentrada. Estrategia 05: vermelho, verde, vermelho e verde; ultimo candle terminou verde, PUT venda sem reentrada. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde rompe a MA21, termina acima depois de 33s, com apenas 1 ou 2 verdes antes, entrada + G1. Venda no 33: vermelho rompe a MA21 para baixo, termina abaixo depois de 33s, com apenas 1 ou 2 vermelhos antes, entrada PUT + G1. CALL 33 MA21: candle verde rompe a MA21 para cima; candle seguinte fica negativo aos 33s e fecha verde positivo, CALL com entrada + G1. PUT 33 MA21: candle vermelho rompe a MA21 para baixo; candle seguinte fica verde aos 33s e fecha vermelho negativo, PUT com entrada + G1. Pares 18min: 18+ minutos sem 2 candles iguais; nasceu verde CALL, nasceu vermelho PUT.",
             "strategy_moment": strategy_moment["title"],
             "strategy_moment_detail": strategy_moment["detail"],
@@ -1929,193 +1937,206 @@ def api_state():
     return JSONResponse(bot.state())
 
 
-@app.get("/api/history/stats")
-def api_history_stats():
-    try:
-        trades = bot.history.all()
-    except Exception as exc:
-        trades = []
-    
-    # Sort trades by timestamp descending (newest first)
-    def get_timestamp(t):
-        return t.get("timestamp") or ""
-    
-    sorted_trades = sorted(trades, key=get_timestamp, reverse=True)
-    
-    # 1. Net Profit Evolution (Daily profit)
-    daily_profits = {}
-    from datetime import datetime
-    for trade in trades:
-        ts = trade.get("timestamp")
-        if not ts:
+def parse_trade_datetime(value: str | None) -> datetime | None:
+    if not value:
+        return None
+    for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S"):
+        try:
+            return datetime.strptime(str(value), fmt)
+        except ValueError:
             continue
-        # Support both YYYY-MM-DD and DD/MM/YYYY formats
-        date_str = ts.split(" ")[0]
-        if "/" in date_str:
-            # DD/MM/YYYY -> YYYY-MM-DD
-            try:
-                parts = date_str.split("/")
-                if len(parts) == 3:
-                    date_str = f"{parts[2]}-{parts[1]}-{parts[0]}"
-            except Exception:
-                pass
-        
-        profit_val = trade.get("profit")
-        if profit_val is None:
-            profit = 0.0
-        elif isinstance(profit_val, (int, float)):
-            profit = float(profit_val)
-        else:
-            try:
-                profit_str = str(profit_val).replace("R$", "").replace("+", "").replace(" ", "").strip()
-                profit = float(profit_str)
-            except ValueError:
-                profit = 0.0
-        daily_profits[date_str] = daily_profits.get(date_str, 0.0) + profit
-        
-    # Get sorted list of dates
-    sorted_dates = sorted(daily_profits.keys())
-    # Keep last 15 dates
-    recent_dates = sorted_dates[-15:] if len(sorted_dates) > 15 else sorted_dates
-    
-    # Calculate cumulative balance starting at 0
+    return None
+
+
+def parse_trade_profit(value) -> float:
+    if value is None:
+        return 0.0
+    if isinstance(value, (int, float)):
+        return float(value)
+    try:
+        cleaned = str(value).replace("R$", "").replace("+", "").replace(" ", "").strip()
+        return float(cleaned)
+    except ValueError:
+        return 0.0
+
+
+def strategy_name_from_pattern(pattern: str | None) -> str:
+    text = str(pattern or "").strip()
+    lower = text.lower()
+    if not lower:
+        return "Sem estrategia registrada"
+    if "entrada manual" in lower:
+        return "Entrada Manual"
+    if "estrategia 03" in lower:
+        return "Estrategia 03"
+    if "estrategia 04" in lower:
+        return "Estrategia 04"
+    if "estrategia 05" in lower:
+        return "Estrategia 05"
+    if "estrategia 01" in lower or "8 candles" in lower or "8 velas" in lower:
+        return "Estrategia 01"
+    if "minutos sem 2 candles iguais" in lower or "par de cores atrasado" in lower or "pares 18min" in lower:
+        return "Pares 18min"
+    if "velas 5, 6 e 7" in lower:
+        return "MA21 sem pavio"
+    if "comprar no segundo 33" in lower:
+        return "MA21 CALL 33s"
+    if "operar vendido no segundo 33" in lower or "venda no 33" in lower:
+        return "MA21 PUT 33s"
+    if "negativo aos 33s" in lower:
+        return "MA21 virada CALL"
+    if "verde aos 33s" in lower:
+        return "MA21 virada PUT"
+    if "ma21" in lower:
+        return "MA21"
+    return "Sem estrategia registrada"
+
+
+def normalize_history_trade(trade: dict, index: int) -> dict:
+    pattern = trade.get("pattern") or trade.get("motivo") or ""
+    normalized = dict(trade)
+    normalized["pattern"] = pattern
+    normalized["strategy_name"] = strategy_name_from_pattern(pattern)
+    normalized["profit"] = round(parse_trade_profit(trade.get("profit")), 2)
+    normalized["direction"] = trade.get("direction") or trade.get("position") or ""
+    normalized["cycle_id"] = trade.get("cycle_id") or f"legacy-{index}"
+    return normalized
+
+
+def trade_day_key(trade: dict) -> str:
+    dt = parse_trade_datetime(trade.get("timestamp") or trade.get("time"))
+    return dt.strftime("%Y-%m-%d") if dt else ""
+
+
+
+@app.get("/api/history/stats")
+def api_history_stats(day: str = ""):
+    try:
+        raw_trades = bot.history.all()
+    except Exception:
+        raw_trades = []
+
+    requested_day = day if day else today_key()
+    trades = [
+        normalize_history_trade(trade, index)
+        for index, trade in enumerate(raw_trades)
+        if trade_day_key(trade) == requested_day
+    ]
+    sorted_trades = sorted(trades, key=lambda row: row.get("timestamp") or "", reverse=True)
+
+    daily_profits: dict[str, float] = {}
+    for trade in trades:
+        dt = parse_trade_datetime(trade.get("timestamp"))
+        if not dt:
+            continue
+        day_key = dt.strftime("%Y-%m-%d")
+        daily_profits[day_key] = daily_profits.get(day_key, 0.0) + parse_trade_profit(trade.get("profit"))
+
     balance_evolution = []
     cumulative = 0.0
-    for d in recent_dates:
-        cumulative += daily_profits[d]
-        # format date label for chart (DD/MM)
-        date_label = d
-        try:
-            parts = d.split("-")
-            if len(parts) == 3:
-                date_label = f"{parts[2]}/{parts[1]}"
-        except Exception:
-            pass
-        balance_evolution.append({
-            "date": date_label,
-            "profit": round(daily_profits[d], 2),
-            "cumulative": round(cumulative, 2)
-        })
-        
-    # 2. Assertiveness by Strategy
-    strategy_groups = {}
+    for day_key in sorted(daily_profits.keys()):
+        cumulative += daily_profits[day_key]
+        balance_evolution.append(
+            {
+                "date": datetime.strptime(day_key, "%Y-%m-%d").strftime("%d/%m"),
+                "profit": round(daily_profits[day_key], 2),
+                "cumulative": round(cumulative, 2),
+            }
+        )
+
+    cycles: dict[str, dict] = {}
     for trade in trades:
-        pattern = trade.get("motivo") or trade.get("pattern") or "8 Velas Consecutivas"
-        pattern = str(pattern)
-        pattern_lower = pattern.lower()
-        if "8 velas" in pattern_lower or "8 candles" in pattern_lower:
-            pattern = "Estratégia 01"
-        elif "reversao" in pattern_lower or "reversão" in pattern_lower:
-            pattern = "Estratégia 02"
-        elif "ma21" in pattern_lower or "compra no 33" in pattern_lower or "venda no 33" in pattern_lower:
-            pattern = "Estratégia 03"
-        elif "pares 18min" in pattern_lower or "pair watch" in pattern_lower:
-            pattern = "Pares 18min"
-        else:
-            pattern = "Estratégia 04" if "04" in pattern else "Estratégia 05" if "05" in pattern else "Estratégia 01"
-            
         result = trade.get("result")
         if result not in {"WIN", "LOSS", "DOJI"}:
             continue
-            
-        if pattern not in strategy_groups:
-            strategy_groups[pattern] = {"wins": 0, "losses": 0, "total": 0}
-            
-        strategy_groups[pattern]["total"] += 1
-        if result == "WIN":
-            strategy_groups[pattern]["wins"] += 1
-        elif result == "LOSS":
-            strategy_groups[pattern]["losses"] += 1
+        cycle = cycles.setdefault(
+            trade["cycle_id"],
+            {"strategy": trade["strategy_name"], "results": [], "profit": 0.0},
+        )
+        if cycle["strategy"] == "Sem estrategia registrada" and trade["strategy_name"] != "Sem estrategia registrada":
+            cycle["strategy"] = trade["strategy_name"]
+        cycle["results"].append(result)
+        cycle["profit"] += parse_trade_profit(trade.get("profit"))
+
+    strategy_groups: dict[str, dict] = {}
+    for cycle in cycles.values():
+        strategy = cycle["strategy"]
+        if strategy == "Sem estrategia registrada":
+            continue
+        group = strategy_groups.setdefault(strategy, {"wins": 0, "losses": 0, "total": 0, "profit": 0.0})
+        cycle_result = "WIN" if "WIN" in cycle["results"] else "LOSS" if "LOSS" in cycle["results"] else "DOJI"
+        group["total"] += 1
+        group["profit"] += cycle["profit"]
+        if cycle_result == "WIN":
+            group["wins"] += 1
+        elif cycle_result == "LOSS":
+            group["losses"] += 1
 
     strategies_stats = []
-    for pat, s in strategy_groups.items():
-        if s["total"] == 0:
+    for name, group in strategy_groups.items():
+        if not group["total"]:
             continue
-        win_rate = (s["wins"] / s["total"]) * 100
-        strategies_stats.append({
-            "name": pat,
-            "wins": s["wins"],
-            "losses": s["losses"],
-            "total": s["total"],
-            "win_rate": round(win_rate, 2),
-            "loss_rate": round(100 - win_rate, 2)
-        })
-        
-    strategies_best = sorted(strategies_stats, key=lambda x: x["win_rate"], reverse=True)
-    strategies_worst = sorted(strategies_stats, key=lambda x: x["win_rate"])
-    
-    # 3. Heatmap (Weekday vs 2-Hour block)
-    heatmap_grid = {wd: {h: {"wins": 0, "total": 0} for h in range(12)} for wd in range(7)}
-    
+        win_rate = (group["wins"] / group["total"]) * 100
+        strategies_stats.append(
+            {
+                "name": name,
+                "wins": group["wins"],
+                "losses": group["losses"],
+                "total": group["total"],
+                "profit": round(group["profit"], 2),
+                "win_rate": round(win_rate, 2),
+                "loss_rate": round(100 - win_rate, 2),
+            }
+        )
+
+    strategies_best = sorted(strategies_stats, key=lambda row: (row["win_rate"], row["total"]), reverse=True)
+    strategies_worst = sorted(strategies_stats, key=lambda row: (row["win_rate"], -row["total"]))
+
+    heatmap_grid = {wd: {block: {"wins": 0, "total": 0} for block in range(12)} for wd in range(7)}
     for trade in trades:
-        ts = trade.get("timestamp")
         result = trade.get("result")
-        if not ts or result not in {"WIN", "LOSS"}:
+        if result not in {"WIN", "LOSS"}:
             continue
-        
-        # Support multiple timestamp formats
-        dt = None
-        for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S"):
-            try:
-                dt = datetime.strptime(ts, fmt)
-                break
-            except ValueError:
-                continue
+        dt = parse_trade_datetime(trade.get("timestamp"))
         if not dt:
             continue
-            
-        try:
-            wd = dt.weekday() # 0-6
-            hour = dt.hour # 0-23
-            block = hour // 2 # 0-11
-            heatmap_grid[wd][block]["total"] += 1
-            if result == "WIN":
-                heatmap_grid[wd][block]["wins"] += 1
-        except Exception:
-            continue
-            
+        block = dt.hour // 2
+        heatmap_grid[dt.weekday()][block]["total"] += 1
+        if result == "WIN":
+            heatmap_grid[dt.weekday()][block]["wins"] += 1
+
     heatmap_data = []
     for wd in range(7):
         row_data = []
         for block in range(12):
-            g = heatmap_grid[wd][block]
-            rate = (g["wins"] / g["total"] * 100) if g["total"] > 0 else 0.0
-            row_data.append({
-                "block": block,
-                "win_rate": round(rate, 2),
-                "total": g["total"]
-            })
+            group = heatmap_grid[wd][block]
+            rate = (group["wins"] / group["total"] * 100) if group["total"] else 0.0
+            row_data.append({"block": block, "win_rate": round(rate, 2), "total": group["total"]})
         heatmap_data.append(row_data)
-        
-    # 4. Quantity of Operations by Hour
+
+    available_days = [requested_day]
+    selected_day = requested_day
     ops_by_hour = [0] * 24
     for trade in trades:
-        ts = trade.get("timestamp")
-        if not ts:
-            continue
-        dt = None
-        for fmt in ("%Y-%m-%d %H:%M:%S", "%d/%m/%Y %H:%M:%S"):
-            try:
-                dt = datetime.strptime(ts, fmt)
-                break
-            except ValueError:
-                continue
+        dt = parse_trade_datetime(trade.get("timestamp"))
         if not dt:
             continue
-            
-        try:
-            ops_by_hour[dt.hour] += 1
-        except Exception:
+        if selected_day and dt.strftime("%Y-%m-%d") != selected_day:
             continue
-            
-    return JSONResponse({
-        "trades": sorted_trades,
-        "balance_evolution": balance_evolution,
-        "strategies_best": strategies_best,
-        "strategies_worst": strategies_worst,
-        "heatmap": heatmap_data,
-        "ops_by_hour": ops_by_hour
-    })
+        ops_by_hour[dt.hour] += 1
+
+    return JSONResponse(
+        {
+            "trades": sorted_trades,
+            "balance_evolution": balance_evolution,
+            "strategies_best": strategies_best,
+            "strategies_worst": strategies_worst,
+            "heatmap": heatmap_data,
+            "ops_by_hour": ops_by_hour,
+            "available_days": available_days,
+            "selected_day": selected_day,
+        }
+    )
 
 
 @app.post("/api/results/clear")

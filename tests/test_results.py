@@ -1,12 +1,13 @@
 import unittest
 import threading
+import json
 from unittest.mock import patch
 
 from models.settings import BotSettings
 from models.trade import TradeResult
 from robot.executor import TradeExecutor
 from robot.engine import RobotEngine
-from web_main import WebBot
+from web_main import WebBot, api_history_stats, normalize_history_trade, strategy_name_from_pattern
 
 
 class DummyLogger:
@@ -131,6 +132,58 @@ class ResultAccountingTests(unittest.TestCase):
         self.assertTrue(engine.is_strategy_in_cooldown(asset, signal))
         engine.release_inactive_strategy_cooldowns(asset, other_signal)
         self.assertFalse(engine.is_strategy_in_cooldown(asset, signal))
+
+    def test_strategy_classifier_uses_real_robot_families(self) -> None:
+        self.assertEqual(strategy_name_from_pattern("Estrategia 04: verde, vermelho, verde e vermelho"), "Estrategia 04")
+        self.assertEqual(strategy_name_from_pattern("Estrategia 05: vermelho, verde, vermelho e verde"), "Estrategia 05")
+        self.assertEqual(strategy_name_from_pattern("Estrategia 03: 8 candles verdes seguidos"), "Estrategia 03")
+        self.assertEqual(strategy_name_from_pattern("Vermelho sem pavio abaixo da MA21 + velas 5, 6 e 7"), "MA21 sem pavio")
+
+    def test_history_without_pattern_is_not_labeled_strategy_01(self) -> None:
+        row = normalize_history_trade({"asset": "EURUSD", "result": "WIN", "profit": 1.2}, 0)
+
+        self.assertEqual(row["strategy_name"], "Sem estrategia registrada")
+
+    def test_history_stats_returns_only_requested_day(self) -> None:
+        rows = [
+            {"timestamp": "2026-07-25 12:00:00", "asset": "EURUSD", "direction": "CALL", "result": "WIN", "profit": 5, "pattern": "Estrategia 04"},
+            {"timestamp": "2026-07-26 12:00:00", "asset": "GBPUSD", "direction": "PUT", "result": "LOSS", "profit": -3, "pattern": "Estrategia 05"},
+        ]
+
+        with patch("web_main.bot.history.all", return_value=rows):
+            response = api_history_stats(day="2026-07-26")
+
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(len(payload["trades"]), 1)
+        self.assertEqual(payload["trades"][0]["asset"], "GBPUSD")
+        self.assertEqual(payload["available_days"], ["2026-07-26"])
+
+    def test_old_session_score_resets_on_new_day(self) -> None:
+        bot = object.__new__(WebBot)
+        bot.session_wins = 9
+        bot.session_losses = 2
+        bot.session_profit = 15.0
+        bot.session_results = [{"result": "WIN"}]
+        bot.used_signal_keys = {"old"}
+        bot.asset_signal_cooldowns = {"EURUSD": 1}
+        bot.asset_strategy_cooldowns = {"EURUSD": {"estrategia 01"}}
+        bot.pair_watch_states = {"EURUSD": {"watching": True}}
+        bot.pair_watch_respected = 1
+        bot.pair_watch_entries = 1
+        bot.risk = type("Risk", (), {"daily_profit": 15.0})()
+        bot.executor = None
+        bot.running = False
+        bot.connected = False
+        bot.last_green_time = "12:00:00"
+        bot.save_session_score = lambda: None
+
+        with patch("web_main.today_key", return_value="2026-07-26"):
+            bot.apply_session_score_data({"date": "2026-07-25", "wins": 9, "losses": 2, "profit": 15.0})
+
+        self.assertEqual(bot.session_wins, 0)
+        self.assertEqual(bot.session_losses, 0)
+        self.assertEqual(bot.session_profit, 0.0)
+        self.assertEqual(bot.session_results, [])
 
 
 if __name__ == "__main__":
