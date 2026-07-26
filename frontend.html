@@ -2575,6 +2575,9 @@
     let selectedOpsDay = "";
     let resultsCurrentPage = 1;
     const resultsPageSize = 10;
+    let entryCountdownDeadline = 0;
+    let entryCountdownPrefix = "Entrada em";
+    let entryCountdownTimer = null;
 
     async function showResultadosPage() {
       if (!connected) {
@@ -3572,6 +3575,7 @@
           }
 
           $("entryStatusVal").textContent = compactStatusText(data.trade || "Enviando...");
+          syncEntryCountdown(data.trade || "");
           const loaderTextEl = $("entryLoaderText");
           if (loaderTextEl) {
             loaderTextEl.textContent = entryLoaderText(data.trade || "");
@@ -3587,6 +3591,7 @@
           $("radarStatePanel").classList.remove("hidden");
           $("entryStatePanel").classList.add("hidden");
           $("resultStatePanel").classList.add("hidden");
+          clearEntryCountdown();
           if (cardPanel) {
             cardPanel.style.minHeight = "360px";
           }
@@ -3616,15 +3621,54 @@
       if (upper.includes("ENTRADA")) return "Ordem principal";
       if (upper.includes("WIN") || upper.includes("LUCRO")) return "Finalizando WIN";
       if (upper.includes("LOSS") || upper.includes("PREJUIZO")) return "Finalizando LOSS";
+      clearEntryCountdown();
       return text;
     }
 
     function countdownStatus(text, fallback) {
-      const match = String(text).match(/\(([\d.,]+)s\)/i);
-      if (!match) return fallback;
-      const seconds = Number(match[1].replace(",", "."));
+      const seconds = parseCountdownSeconds(text);
       if (!Number.isFinite(seconds)) return fallback;
       return `${fallback} ${Math.max(0, seconds).toFixed(1)}s`;
+    }
+
+    function parseCountdownSeconds(text) {
+      const match = String(text).match(/\(([\d.,]+)s\)/i);
+      return match ? Number(match[1].replace(",", ".")) : NaN;
+    }
+
+    function syncEntryCountdown(text) {
+      const upper = String(text || "").toUpperCase();
+      const isCountdown = upper.includes("PREPARANDO ENTRADA") || upper.includes("AGUARDANDO SEGUNDO");
+      const seconds = parseCountdownSeconds(text);
+      if (!isCountdown || !Number.isFinite(seconds)) {
+        clearEntryCountdown();
+        return;
+      }
+
+      entryCountdownPrefix = upper.includes("PREPARANDO ENTRADA") ? "Proximo candle em" : "Entrada em";
+      entryCountdownDeadline = Date.now() + Math.max(0, seconds) * 1000;
+      if (!entryCountdownTimer) {
+        entryCountdownTimer = setInterval(updateEntryCountdownDisplay, 100);
+      }
+      updateEntryCountdownDisplay();
+    }
+
+    function updateEntryCountdownDisplay() {
+      const statusEl = $("entryStatusVal");
+      if (!statusEl || !entryCountdownDeadline) return;
+      const remaining = Math.max(0, (entryCountdownDeadline - Date.now()) / 1000);
+      statusEl.textContent = `${entryCountdownPrefix} ${remaining.toFixed(1)}s`;
+      if (remaining <= 0) {
+        clearEntryCountdown();
+      }
+    }
+
+    function clearEntryCountdown() {
+      entryCountdownDeadline = 0;
+      if (entryCountdownTimer) {
+        clearInterval(entryCountdownTimer);
+        entryCountdownTimer = null;
+      }
     }
 
     function entryLoaderText(text) {
