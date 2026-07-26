@@ -2109,9 +2109,7 @@ def api_history_stats(day: str = ""):
 
     strategies_stats = []
     for name, group in strategy_groups.items():
-        if not group["total"]:
-            continue
-        win_rate = (group["wins"] / group["total"]) * 100
+        win_rate = (group["wins"] / group["total"]) * 100 if group["total"] else 0.0
         strategies_stats.append(
             {
                 "name": name,
@@ -2120,7 +2118,7 @@ def api_history_stats(day: str = ""):
                 "total": group["total"],
                 "profit": round(group["profit"], 2),
                 "win_rate": round(win_rate, 2),
-                "loss_rate": round(100 - win_rate, 2),
+                "loss_rate": round((group["losses"] / group["total"]) * 100, 2) if group["total"] else 0.0,
             }
         )
 

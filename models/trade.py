@@ -14,6 +14,7 @@ class Signal:
     strategy_window_seconds: int = 300
     max_entries: int = 0
     entry_second: int | None = None
+    enter_on_signal: bool = False
 
 
 @dataclass(slots=True)
@@ -29,3 +30,5 @@ class TradeResult:
     balance_before: float
     balance_after: float
     account_mode: str
+    pattern: str = ""
+    cycle_id: str = ""

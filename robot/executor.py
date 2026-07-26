@@ -78,6 +78,7 @@ class TradeExecutor:
         step = 0
         last_trade: TradeResult | None = None
         self.last_cycle_trades = []
+        cycle_id = f"{signal.asset}-{int(time.time() * 1000)}"
         balance_before = self.client.get_balance()
         detected_mode = self.client.get_balance_mode()
         while True:
@@ -145,6 +146,8 @@ class TradeExecutor:
                 balance_before=balance_before,
                 balance_after=balance_after,
                 account_mode=account_mode,
+                pattern=signal.pattern,
+                cycle_id=cycle_id,
             )
             self.update_history(trade)
             self.last_cycle_trades.append(trade)
@@ -194,6 +197,7 @@ class TradeExecutor:
             return None
 
         platform_direction = "call" if signal.direction == "CALL" else "put"
+        cycle_id = f"{signal.asset}-{int(time.time() * 1000)}"
         self.current_trade = f"{note}: {signal.direction} {signal.asset} R$ {value:.2f}"
         self.logger.info("[TRADE] sinal=%s plataforma=%s ativo=%s valor=%.2f", signal.direction, platform_direction, signal.asset, value)
         ok, order_id = self.client.buy(signal.asset, platform_direction, value, duration)
@@ -222,6 +226,8 @@ class TradeExecutor:
             balance_before=balance_before,
             balance_after=balance_after,
             account_mode=account_mode,
+            pattern=signal.pattern or note,
+            cycle_id=cycle_id,
         )
         self.update_history(trade)
         label = "GREEN" if result == "WIN" else "RED" if result == "LOSS" else "DOJI"
@@ -237,6 +243,8 @@ class TradeExecutor:
             time.sleep(wait)
 
     def wait_entry_time(self, signal: Signal, settings: BotSettings) -> bool:
+        if getattr(signal, "enter_on_signal", False):
+            return True
         entry_second = getattr(signal, "entry_second", None)
         if entry_second is None:
             return self.ensure_candle_open_entry(settings)

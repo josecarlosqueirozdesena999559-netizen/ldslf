@@ -2303,7 +2303,7 @@
 
           <!-- Card 2: Strategies Best -->
           <div class="panel" style="display: flex; flex-direction: column; padding: 20px;">
-            <h3 class="panel-title" style="margin-bottom: 15px; font-size: 13px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted);"><i class="fa-solid fa-square-check" style="color: #00e676; margin-right: 5px;"></i> Estratégias que mais respeitam</h3>
+            <h3 class="panel-title" style="margin-bottom: 15px; font-size: 13px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted);"><i class="fa-solid fa-square-check" style="color: #00e676; margin-right: 5px;"></i> Estratégias que funcionam</h3>
             <div id="strategiesBestList" style="display: flex; flex-direction: column; gap: 12px; flex-grow: 1; justify-content: center;">
               <!-- Dynamic entries here -->
             </div>
@@ -2311,7 +2311,7 @@
 
           <!-- Card 3: Strategies Worst -->
           <div class="panel" style="display: flex; flex-direction: column; padding: 20px;">
-            <h3 class="panel-title" style="margin-bottom: 15px; font-size: 13px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted);"><i class="fa-solid fa-square-xmark" style="color: var(--accent); margin-right: 5px;"></i> Estratégias que mais erram</h3>
+            <h3 class="panel-title" style="margin-bottom: 15px; font-size: 13px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted);"><i class="fa-solid fa-square-xmark" style="color: var(--accent); margin-right: 5px;"></i> Estratégias que não funcionam</h3>
             <div id="strategiesWorstList" style="display: flex; flex-direction: column; gap: 12px; flex-grow: 1; justify-content: center;">
               <!-- Dynamic entries here -->
             </div>
@@ -2585,6 +2585,7 @@
         return;
       }
       setPage("resultadosPage", "Painel de Resultados");
+      selectedOpsDay = "";
       startPolling();
       await loadResultsPageData();
     }
@@ -2614,7 +2615,14 @@
         if (strategyFilter) {
           const currentStrategy = strategyFilter.value || "ALL";
           strategyFilter.innerHTML = '<option value="ALL">Todas Estrategias</option>';
-          const uniqueStrategies = [...new Set(resultsHistoryData.map(resultStrategyName).filter(Boolean))].sort();
+          const statsStrategies = [
+            ...(data.strategies_best || []),
+            ...(data.strategies_worst || [])
+          ].map(s => s.name).filter(Boolean);
+          const uniqueStrategies = [...new Set([
+            ...statsStrategies,
+            ...resultsHistoryData.map(resultStrategyName).filter(Boolean)
+          ])].sort();
           uniqueStrategies.forEach(strategy => {
             const opt = document.createElement("option");
             opt.value = strategy;
@@ -2788,40 +2796,48 @@
     function renderStrategiesRanking(best, worst) {
       const bestList = $("strategiesBestList");
       const worstList = $("strategiesWorstList");
+      const strategyRow = (s, type) => {
+        const isLoss = type === "loss";
+        const rate = Number(isLoss ? s.loss_rate : s.win_rate) || 0;
+        const wins = Number(s.wins || 0);
+        const losses = Number(s.losses || 0);
+        const total = Number(s.total || 0);
+        const color = isLoss ? "var(--accent)" : "#00e676";
+        const summary = total
+          ? `${total} operaç${total === 1 ? "ão" : "ões"} hoje`
+          : "Aguardando operações hoje";
+        return `
+            <div style="display:flex; flex-direction:column; gap: 7px;">
+              <div style="display:flex; justify-content:space-between; gap:10px; font-size:12px; font-weight:700;">
+                <span style="color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${s.name}</span>
+                <span style="color:${color}; flex-shrink:0;">${rate.toFixed(1)}%</span>
+              </div>
+              <div style="width:100%; height:6px; background:#121217; border-radius:3px; overflow:hidden;">
+                <div style="height:100%; width:${Math.min(100, Math.max(0, rate))}%; background:${color}; border-radius:3px;"></div>
+              </div>
+              <div style="display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:6px;">
+                <span style="border:1px solid rgba(0,230,118,0.25); background:rgba(0,230,118,0.08); color:#00e676; border-radius:6px; padding:5px 4px; font-size:10px; font-weight:800; text-align:center;">Acertou ${wins}</span>
+                <span style="border:1px solid rgba(255,102,0,0.25); background:rgba(255,102,0,0.08); color:var(--accent); border-radius:6px; padding:5px 4px; font-size:10px; font-weight:800; text-align:center;">Errou ${losses}</span>
+                <span style="border:1px solid var(--panel-border); background:rgba(255,255,255,0.03); color:var(--text-muted); border-radius:6px; padding:5px 4px; font-size:10px; font-weight:800; text-align:center;">Total ${total}</span>
+              </div>
+              <div style="font-size:10px; color:var(--text-muted); font-weight:600;">${summary}</div>
+            </div>
+          `;
+      };
 
       if (bestList) {
         if (!best.length) {
-          bestList.innerHTML = '<div style="text-align:center; color:var(--text-muted); font-size:12px;">Sem dados suficientes</div>';
+          bestList.innerHTML = '<div style="text-align:center; color:var(--text-muted); font-size:12px;">Aguardando operações hoje</div>';
         } else {
-          bestList.innerHTML = best.slice(0, 5).map(s => `
-            <div style="display:flex; flex-direction:column; gap: 4px;">
-              <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600;">
-                <span style="color:#fff;">${s.name}</span>
-                <span style="color:#00e676;">${s.win_rate.toFixed(1)}%</span>
-              </div>
-              <div style="width:100%; height:6px; background:#121217; border-radius:3px; overflow:hidden;">
-                <div style="height:100%; width:${s.win_rate}%; background:#00e676; border-radius:3px;"></div>
-              </div>
-            </div>
-          `).join("");
+          bestList.innerHTML = best.slice(0, 5).map(s => strategyRow(s, "win")).join("");
         }
       }
 
       if (worstList) {
         if (!worst.length) {
-          worstList.innerHTML = '<div style="text-align:center; color:var(--text-muted); font-size:12px;">Sem dados suficientes</div>';
+          worstList.innerHTML = '<div style="text-align:center; color:var(--text-muted); font-size:12px;">Aguardando operações hoje</div>';
         } else {
-          worstList.innerHTML = worst.slice(0, 5).map(s => `
-            <div style="display:flex; flex-direction:column; gap: 4px;">
-              <div style="display:flex; justify-content:space-between; font-size:12px; font-weight:600;">
-                <span style="color:#fff;">${s.name}</span>
-                <span style="color:var(--accent);">${s.loss_rate.toFixed(1)}%</span>
-              </div>
-              <div style="width:100%; height:6px; background:#121217; border-radius:3px; overflow:hidden;">
-                <div style="height:100%; width:${s.loss_rate}%; background:var(--accent); border-radius:3px;"></div>
-              </div>
-            </div>
-          `).join("");
+          worstList.innerHTML = worst.slice(0, 5).map(s => strategyRow(s, "loss")).join("");
         }
       }
     }
@@ -3721,12 +3737,17 @@
       const isWin = trade.result === "WIN";
       const panel = $("resultStatePanel");
       if (panel) {
-        panel.className = `result-panel-mini ${isWin ? 'win' : 'loss'}`;
+        panel.className = `result-overlay-panel ${isWin ? 'win' : 'loss'}`;
+        const icon = $("resultIcon");
+        if (icon) {
+          icon.className = `fa-solid ${isWin ? 'fa-trophy' : 'fa-circle-xmark'}`;
+        }
         $("resultHeader").textContent = isWin ? "WIN" : "LOSS";
         $("resultSub").textContent = `${formatAssetName(trade.asset)} • ${trade.gale || 'ENTRADA'}`;
         
         const profit = Number(trade.profit || 0);
         $("resultProfit").textContent = `${profit >= 0 ? '+' : ''}R$ ${profit.toFixed(2)}`;
+        $("resultProfit").className = `result-profit-text ${profit >= 0 ? 'green' : 'red'}`;
       }
 
       resultOverlayTimeout = setTimeout(() => {

@@ -37,24 +37,55 @@ def green_candle(timestamp: int, close: float, update_second: int) -> Candle:
     )
 
 
+def live_green_candle(timestamp: int, open_price: float, close: float, update_second: int) -> Candle:
+    return Candle(
+        open=open_price,
+        close=close,
+        high=max(open_price, close),
+        low=min(open_price, close),
+        timestamp=timestamp,
+        update_timestamp=timestamp + update_second,
+        closed=False,
+    )
+
+
 class Strategy01RedBelowMa21Tests(unittest.TestCase):
-    def make_asset(self, last: Candle) -> Asset:
+    def make_asset(self, last: Candle, current: Candle | None = None) -> Asset:
         candles = [flat_candle(index * 60) for index in range(20)]
         candles.append(last)
+        if current:
+            candles.append(current)
         return Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
 
-    def test_red_below_real_ma21_before_33_seconds_sells_with_one_reentry(self) -> None:
-        signal = generate_signal(self.make_asset(red_candle(20 * 60, close=0.70, update_second=33)))
+    def test_red_below_real_ma21_before_33_seconds_sells_after_pullback_with_one_reentry(self) -> None:
+        signal = generate_signal(
+            self.make_asset(
+                red_candle(20 * 60, close=0.70, update_second=33),
+                live_green_candle(21 * 60, open_price=0.70, close=0.76, update_second=8),
+            )
+        )
 
         self.assertIsNotNone(signal)
         self.assertEqual(signal.direction, "PUT")
         self.assertEqual(signal.sequence_color, "RED")
         self.assertEqual(signal.max_entries, 2)
         self.assertIsNone(signal.entry_second)
+        self.assertTrue(signal.enter_on_signal)
         self.assertIn("Estrategia 01", signal.pattern)
         self.assertIn("media movel real de 21", signal.pattern)
+        self.assertIn("aguardou repique", signal.pattern)
         self.assertEqual(TradeExecutor.direction_for_step(signal, 0), "PUT")
         self.assertEqual(TradeExecutor.max_steps_for_signal(signal, BotSettings()), 1)
+
+    def test_no_signal_until_next_candle_pulls_back(self) -> None:
+        signal = generate_signal(
+            self.make_asset(
+                red_candle(20 * 60, close=0.70, update_second=33),
+                live_green_candle(21 * 60, open_price=0.70, close=0.72, update_second=8),
+            )
+        )
+
+        self.assertIsNone(signal)
 
     def test_no_signal_when_red_closes_above_ma21(self) -> None:
         candles = [low_flat_candle(index * 60) for index in range(20)]

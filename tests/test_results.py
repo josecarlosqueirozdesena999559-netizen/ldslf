@@ -162,6 +162,14 @@ class ResultAccountingTests(unittest.TestCase):
         self.assertEqual(payload["trades"][0]["asset"], "GBPUSD")
         self.assertEqual(payload["available_days"], ["2026-07-26"])
 
+    def test_history_stats_does_not_show_unused_strategy_today(self) -> None:
+        with patch("web_main.bot.history.all", return_value=[]):
+            response = api_history_stats(day="2026-07-26")
+
+        payload = json.loads(response.body.decode("utf-8"))
+        self.assertEqual(payload["strategies_best"], [])
+        self.assertEqual(payload["strategies_worst"], [])
+
     def test_old_session_score_resets_on_new_day(self) -> None:
         bot = object.__new__(WebBot)
         bot.session_wins = 9

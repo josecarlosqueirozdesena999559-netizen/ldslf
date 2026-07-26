@@ -14,6 +14,8 @@ CONTINUATION_WINDOW_SECONDS = 600
 MA21_WICKLESS_WINDOW_SECONDS = 600
 MA21_GREEN_BUY_WINDOW_SECONDS = 300
 NEGATIVE_33_GREEN_CLOSE_WINDOW_SECONDS = 300
+STRATEGY_01_PULLBACK_BODY_RATIO = 0.15
+STRATEGY_01_MIN_PULLBACK_PRICE_RATIO = 0.00005
 STRATEGY_PATTERN_MARKERS = (
     "estrategia 01",
 )
@@ -27,6 +29,7 @@ def make_signal(
     window_seconds: int,
     max_entries: int = 2,
     entry_second: int | None = None,
+    enter_on_signal: bool = False,
 ) -> Signal:
     return Signal(
         asset=asset.name,
@@ -39,6 +42,7 @@ def make_signal(
         strategy_window_seconds=window_seconds,
         max_entries=max_entries,
         entry_second=entry_second,
+        enter_on_signal=enter_on_signal,
     )
 
 
@@ -175,9 +179,24 @@ def detect_strategy_01_red_below_ma21_before_33(asset: Asset) -> tuple[str | Non
     if candle_close_second(anchor) > 33:
         return None, "Candle vermelho abaixo da MA21 fechou depois dos 33s", color
 
+    current = asset.current_candle
+    if current is None or current.closed or int(current.timestamp) <= int(anchor.timestamp):
+        return None, "Estrategia 01 armada: aguardando candle seguinte subir um pouco", color
+
+    anchor_body = abs(anchor.open - anchor.close)
+    minimum_pullback = max(
+        anchor_body * STRATEGY_01_PULLBACK_BODY_RATIO,
+        abs(anchor.close) * STRATEGY_01_MIN_PULLBACK_PRICE_RATIO,
+    )
+    pullback = current.close - current.open
+    if pullback < minimum_pullback:
+        return None, "Estrategia 01 armada: aguardando repique para vender melhor", color
+    if current.close >= ma21:
+        return None, "Repique voltou na MA21; aguardando novo sinal", color
+
     pattern = (
         "Estrategia 01: candle vermelho fechou abaixo da media movel real de 21 "
-        "ate 33s; venda PUT com entrada e G1 se necessario"
+        "ate 33s; aguardou repique do candle seguinte; venda PUT com entrada e G1 se necessario"
     )
     return "PUT", pattern, color
 
@@ -563,6 +582,7 @@ def collect_strategy_signals(asset: Asset) -> list[Signal]:
                 sequence_color,
                 REVERSAL_WINDOW_SECONDS,
                 max_entries=2,
+                enter_on_signal=True,
             )
         )
 
