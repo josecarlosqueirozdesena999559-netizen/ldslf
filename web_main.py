@@ -50,6 +50,12 @@ def today_key() -> str:
     return bullex_now().strftime("%Y-%m-%d")
 
 
+STRATEGY_OPTIONS = (
+    ("estrategia 01", "Estrategia 01"),
+)
+STRATEGY_KEYS = {key for key, _label in STRATEGY_OPTIONS}
+
+
 class LoginPayload(BaseModel):
     email: str
     password: str
@@ -66,6 +72,7 @@ class SettingsPayload(BaseModel):
     schedule_enabled: bool | None = None
     schedule_start: str | None = None
     schedule_stop: str | None = None
+    enabled_strategies: list[str] | None = None
     real_confirmation: str | None = None
 
 
@@ -199,8 +206,8 @@ class WebBot:
         self.starting = False
         self.auto_trade = True
         self.manual_paused = False
-        self.active_strategy = "Todas estrategias"
-        self.next_strategy = "Monitorando todas as estrategias sem ordem fixa: 8 verdes + reversoes, padroes alternados, MA21 compra/venda 33s e pares 18min"
+        self.active_strategy = "Estrategia 01"
+        self.next_strategy = "Candle vermelho abaixo da MA21 real ate 33s; venda PUT com G1"
         self.schedule_enabled = False
         self.schedule_start = ""
         self.schedule_stop = ""
@@ -292,8 +299,8 @@ class WebBot:
             self.starting = True
             self.manual_paused = False
             self.auto_trade = auto_trade
-            self.active_strategy = "Todas estrategias"
-            self.next_strategy = "Monitorando todas as estrategias sem ordem fixa: 8 verdes + reversoes, padroes alternados, MA21 compra/venda 33s e pares 18min"
+            self.active_strategy = "Estrategia 01"
+            self.next_strategy = "Candle vermelho abaixo da MA21 real ate 33s; venda PUT com G1"
             self.status = "Carregando ativos"
 
         try:
@@ -437,6 +444,10 @@ class WebBot:
             self.update_asset_candles(asset, update_payout)
 
     def update_market_and_find_signal(self) -> Signal | None:
+        if not self.settings.enabled_strategies:
+            self.status = "Nenhuma estrategia configurada"
+            self.update_focus_asset()
+            return None
         update_payout = time.time() - self.last_payout_update >= 30
         if update_payout:
             self.last_payout_update = time.time()
@@ -449,6 +460,8 @@ class WebBot:
             signal = generate_signal(asset)
             if not signal:
                 self.clear_strategy_cooldown(asset)
+                continue
+            if not self.is_signal_strategy_enabled(signal):
                 continue
             self.release_inactive_strategy_cooldowns(asset, signal)
             if self.is_strategy_in_cooldown(asset, signal):
@@ -536,7 +549,7 @@ class WebBot:
             return (120 + max(0, 30 - remaining // 60), asset.payout, self.asset_recency_score(asset), asset.name)
 
         signal = generate_signal(asset)
-        if signal:
+        if signal and self.is_signal_strategy_enabled(signal):
             return (100 + self.strategy_priority(signal), asset.payout, self.asset_recency_score(asset), asset.name)
 
         text = f"{asset.sequence} {asset.signal}".lower()
@@ -577,11 +590,15 @@ class WebBot:
         return self.find_signal_for_sequences(mark_used=False)
 
     def find_signal_for_sequences(self, mark_used: bool = True) -> Signal | None:
+        if not self.settings.enabled_strategies:
+            return None
         signals = []
         for asset in self.assets:
             if asset.open and asset.payout >= self.settings.payout_min:
                 signal = generate_signal(asset)
                 if signal:
+                    if not self.is_signal_strategy_enabled(signal):
+                        continue
                     self.release_inactive_strategy_cooldowns(asset, signal)
                     if self.is_strategy_in_cooldown(asset, signal):
                         continue
@@ -602,6 +619,9 @@ class WebBot:
         return signal
 
     def update_pair_watch_and_find_signal(self) -> Signal | None:
+        if "pares atrasados" not in self.settings.enabled_strategies:
+            self.pair_watch_states = {}
+            return None
         threshold_seconds = self.settings.pair_watch_minutes * 60
         now = time.time()
         signal_to_trade: Signal | None = None
@@ -895,8 +915,8 @@ class WebBot:
             self.status = self.stop_reason
             self.running = False
             return
-        self.next_strategy = "Monitorando todas as estrategias sem ordem fixa: 8 verdes + reversoes, padroes alternados, MA21 compra/venda 33s e pares 18min"
-        self.active_strategy = "Todas estrategias"
+        self.next_strategy = "Candle vermelho abaixo da MA21 real ate 33s; venda PUT com G1"
+        self.active_strategy = "Estrategia 01"
         self.status = "Escaneando ativos em tempo real / aguardando sinal"
 
     def start_scheduler(self) -> None:
@@ -936,6 +956,7 @@ class WebBot:
                 self.settings.stop_loss = max(0.0, float(payload.stop_loss))
             if payload.payout_min is not None:
                 self.settings.payout_min = max(1, min(100, int(payload.payout_min)))
+            self.settings.enabled_strategies = ["estrategia 01"]
             self.settings.martingale_multiplier = 2.0
             if payload.schedule_enabled is not None:
                 self.schedule_enabled = False
@@ -973,6 +994,12 @@ class WebBot:
         self.settings.martingale_multiplier = 2.0
         self.settings.max_martingale = 1
         self.settings.martingale_enabled = True
+        enabled = data.get("enabled_strategies", ["estrategia 01"])
+        self.settings.enabled_strategies = [
+            key for key in enabled if key in STRATEGY_KEYS
+        ] if isinstance(enabled, list) else ["estrategia 01"]
+        if not self.settings.enabled_strategies:
+            self.settings.enabled_strategies = ["estrategia 01"]
         self.schedule_enabled = False
         self.schedule_start = str(data.get("schedule_start", self.schedule_start))
         self.schedule_stop = str(data.get("schedule_stop", self.schedule_stop))
@@ -987,6 +1014,7 @@ class WebBot:
             "stop_loss": self.settings.stop_loss,
             "payout_min": self.settings.payout_min,
             "martingale_multiplier": self.settings.martingale_multiplier,
+            "enabled_strategies": self.settings.enabled_strategies,
             "schedule_enabled": self.schedule_enabled,
             "schedule_start": self.schedule_start,
             "schedule_stop": self.schedule_stop,
@@ -1468,6 +1496,9 @@ class WebBot:
             return "pares atrasados"
         return pattern
 
+    def is_signal_strategy_enabled(self, signal: Signal) -> bool:
+        return self.signal_family(signal) in self.settings.enabled_strategies
+
     @staticmethod
     def format_seconds(seconds: int) -> str:
         minutes, secs = divmod(max(0, seconds), 60)
@@ -1527,8 +1558,8 @@ class WebBot:
 
         return {
             "asset": None,
-            "title": "Escaneando estrategias sem ordem fixa",
-            "detail": "Estrategia 01, estrategia 03, estrategia 04, estrategia 05, MA21 contra, compra/venda no segundo 33, rompimento MA21 aos 33s e pares 18min",
+            "title": "Escaneando Estrategia 01",
+            "detail": "Candle vermelho fechado abaixo da media movel real de 21 ate 33s; venda PUT com entrada e G1.",
         }
 
     def state(self) -> dict:
@@ -1582,8 +1613,8 @@ class WebBot:
             "manual_paused": self.manual_paused,
             "settings_saved": self.settings_saved,
             "account": self.last_account,
-            "strategy": "Todas estrategias",
-            "strategy_detail": "Estrategias analisadas sem ordem fixa. 8 candles seguidos + reversao com 2 candles contrarios: entrada contra a tendencia com entrada, G1 e G2. 8 verdes seguidos + 9o candle vermelho + mais 2 vermelhos: entrada CALL com G1 se der loss. Estrategia 04: verde, vermelho, verde e vermelho; ultimo candle terminou vermelho, CALL compra sem reentrada. Estrategia 05: vermelho, verde, vermelho e verde; ultimo candle terminou verde, PUT venda sem reentrada. MA21: vermelho sem pavio abaixo da media, fechado ate 33s, mais 4 verdes e entradas 5/6/7. Compra no 33: verde rompe a MA21, termina acima depois de 33s, com apenas 1 ou 2 verdes antes, entrada + G1. Venda no 33: vermelho rompe a MA21 para baixo, termina abaixo depois de 33s, com apenas 1 ou 2 vermelhos antes, entrada PUT + G1. CALL 33 MA21: candle verde rompe a MA21 para cima; candle seguinte fica negativo aos 33s e fecha verde positivo, CALL com entrada + G1. PUT 33 MA21: candle vermelho rompe a MA21 para baixo; candle seguinte fica verde aos 33s e fecha vermelho negativo, PUT com entrada + G1. Pares 18min: 18+ minutos sem 2 candles iguais; nasceu verde CALL, nasceu vermelho PUT.",
+            "strategy": "Estrategia 01",
+            "strategy_detail": "Candle vermelho fechado abaixo da media movel real de 21 ate 33s; venda PUT com entrada e G1 se necessario.",
             "strategy_moment": strategy_moment["title"],
             "strategy_moment_detail": strategy_moment["detail"],
             "target_sequence": self.active_strategy,
@@ -1615,6 +1646,10 @@ class WebBot:
                 "martingale_multiplier": self.settings.martingale_multiplier,
                 "max_martingale": self.settings.max_martingale,
                 "timeframe": self.settings.timeframe,
+                "enabled_strategies": self.settings.enabled_strategies,
+                "strategy_options": [
+                    {"key": key, "label": label} for key, label in STRATEGY_OPTIONS
+                ],
                 "schedule_enabled": self.schedule_enabled,
                 "schedule_start": self.schedule_start,
                 "schedule_stop": self.schedule_stop,

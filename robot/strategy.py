@@ -16,14 +16,6 @@ MA21_GREEN_BUY_WINDOW_SECONDS = 300
 NEGATIVE_33_GREEN_CLOSE_WINDOW_SECONDS = 300
 STRATEGY_PATTERN_MARKERS = (
     "estrategia 01",
-    "operar contra nas velas 3, 4 e 5",
-    "estrategia 03",
-    "estrategia 04",
-    "estrategia 05",
-    "operar contra tendencia nas velas 5, 6 e 7",
-    "comprar no segundo 33",
-    "negativo aos 33s e fechou verde positivo",
-    "rompeu a ma21",
 )
 
 
@@ -150,37 +142,44 @@ def describe_strategy_watch(asset: Asset) -> str:
     if not closed:
         return "Aguardando candles"
 
-    color, count, sequence = describe_latest_sequence(asset)
-    if count >= TREND_SEQUENCE_MIN:
-        return f"Padrao 8 ativo: {sequence}"
-    if count >= TREND_SEQUENCE_MIN - 2:
-        return f"Perto dos 8: {sequence}"
+    ma21 = moving_average_at(closed, len(closed) - 1)
+    if ma21 is None:
+        return "Aguardando MA21 real"
 
-    colors = [candle_color(candle) for candle in closed]
-    if len(colors) >= TREND_SEQUENCE_MIN + 1:
-        reversal_color = colors[-1]
-        if reversal_color != "DOJI":
-            reversal_count = 0
-            for item in reversed(colors):
-                if item != reversal_color:
-                    break
-                reversal_count += 1
-            previous_color = "RED" if reversal_color == "GREEN" else "GREEN"
-            previous_count = 0
-            for item in reversed(colors[:-reversal_count]):
-                if item != previous_color:
-                    break
-                previous_count += 1
-            if previous_count >= TREND_SEQUENCE_MIN and reversal_count == 1:
-                return "Reversao 1/2 - perto da entrada 3/4/5"
+    last = closed[-1]
+    if candle_color(last) != "RED":
+        return "Aguardando candle vermelho"
+    if last.close >= ma21:
+        return "Vermelho ainda acima da MA21"
+    if candle_close_second(last) > 33:
+        return "Vermelho abaixo da MA21 fechou depois dos 33s"
+    return "Estrategia 01 armada: vermelho abaixo da MA21 ate 33s"
 
-    ma21_status = describe_ma21_watch(closed)
-    if ma21_status:
-        return ma21_status
-    ma21_33_status = describe_ma21_break_33_watch(asset)
-    if ma21_33_status:
-        return ma21_33_status
-    return "Analisando"
+
+def detect_strategy_01_red_below_ma21_before_33(asset: Asset) -> tuple[str | None, str, str | None]:
+    closed = [candle for candle in asset.candles if candle.closed]
+    if len(closed) < MOVING_AVERAGE_PERIOD:
+        return None, f"Aguardando {MOVING_AVERAGE_PERIOD} candles para MA21 real", None
+
+    anchor_index = len(closed) - 1
+    anchor = closed[anchor_index]
+    color = candle_color(anchor)
+    if color != "RED":
+        return None, "Estrategia 01 aguarda candle vermelho fechado", color
+
+    ma21 = moving_average_at(closed, anchor_index)
+    if ma21 is None:
+        return None, "Aguardando MA21 real", color
+    if anchor.close >= ma21:
+        return None, "Candle vermelho fechou acima da MA21", color
+    if candle_close_second(anchor) > 33:
+        return None, "Candle vermelho abaixo da MA21 fechou depois dos 33s", color
+
+    pattern = (
+        "Estrategia 01: candle vermelho fechou abaixo da media movel real de 21 "
+        "ate 33s; venda PUT com entrada e G1 se necessario"
+    )
+    return "PUT", pattern, color
 
 
 def describe_ma21_watch(closed: list[Candle]) -> str | None:
@@ -554,31 +553,7 @@ def detect_ma21_red_break_positive_33_red_close_put(asset: Asset) -> tuple[str |
 def collect_strategy_signals(asset: Asset) -> list[Signal]:
     signals: list[Signal] = []
 
-    direction, pattern, sequence_color = detect_eight_candle_sequence(asset)
-    if direction:
-        signals.append(make_signal(asset, direction, pattern, sequence_color, REVERSAL_WINDOW_SECONDS, max_entries=3))
-
-    direction, pattern, sequence_color = detect_eight_candle_reversal(asset)
-    if direction:
-        signals.append(make_signal(asset, direction, pattern, sequence_color, REVERSAL_WINDOW_SECONDS, max_entries=3))
-
-    direction, pattern, sequence_color = detect_strategy_03_green_reversal_call(asset)
-    if direction:
-        signals.append(make_signal(asset, direction, pattern, sequence_color, CONTINUATION_WINDOW_SECONDS, max_entries=2))
-
-    direction, pattern, sequence_color = detect_strategy_04_green_red_green_red(asset)
-    if direction:
-        signals.append(make_signal(asset, direction, pattern, sequence_color, REVERSAL_WINDOW_SECONDS, max_entries=1))
-
-    direction, pattern, sequence_color = detect_strategy_05_red_green_red_green(asset)
-    if direction:
-        signals.append(make_signal(asset, direction, pattern, sequence_color, REVERSAL_WINDOW_SECONDS, max_entries=1))
-
-    direction, pattern, sequence_color = detect_ma21_red_wickless_green_continuation(asset)
-    if direction:
-        signals.append(make_signal(asset, direction, pattern, sequence_color, MA21_WICKLESS_WINDOW_SECONDS))
-
-    direction, pattern, sequence_color = detect_ma21_green_buy_at_33(asset)
+    direction, pattern, sequence_color = detect_strategy_01_red_below_ma21_before_33(asset)
     if direction:
         signals.append(
             make_signal(
@@ -586,48 +561,7 @@ def collect_strategy_signals(asset: Asset) -> list[Signal]:
                 direction,
                 pattern,
                 sequence_color,
-                MA21_GREEN_BUY_WINDOW_SECONDS,
-                max_entries=2,
-                entry_second=33,
-            )
-        )
-
-    direction, pattern, sequence_color = detect_ma21_red_sell_at_33(asset)
-    if direction:
-        signals.append(
-            make_signal(
-                asset,
-                direction,
-                pattern,
-                sequence_color,
-                MA21_GREEN_BUY_WINDOW_SECONDS,
-                max_entries=2,
-                entry_second=33,
-            )
-        )
-
-    direction, pattern, sequence_color = detect_ma21_green_break_negative_33_green_close_call(asset)
-    if direction:
-        signals.append(
-            make_signal(
-                asset,
-                direction,
-                pattern,
-                sequence_color,
-                NEGATIVE_33_GREEN_CLOSE_WINDOW_SECONDS,
-                max_entries=2,
-            )
-        )
-
-    direction, pattern, sequence_color = detect_ma21_red_break_positive_33_red_close_put(asset)
-    if direction:
-        signals.append(
-            make_signal(
-                asset,
-                direction,
-                pattern,
-                sequence_color,
-                NEGATIVE_33_GREEN_CLOSE_WINDOW_SECONDS,
+                REVERSAL_WINDOW_SECONDS,
                 max_entries=2,
             )
         )

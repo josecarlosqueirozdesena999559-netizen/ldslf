@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 
 @dataclass(slots=True)
@@ -14,3 +14,4 @@ class BotSettings:
     asset_limit: int = 10
     scan_seconds: int = 3600
     pair_watch_minutes: int = 18
+    enabled_strategies: list[str] = field(default_factory=lambda: ["estrategia 01"])

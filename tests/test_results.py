@@ -108,7 +108,7 @@ class ResultAccountingTests(unittest.TestCase):
             {
                 "asset": "EURUSD",
                 "direction": "CALL",
-                "pattern": "Estrategia 05",
+                "pattern": "Estrategia 01: candle vermelho fechou abaixo da media movel real de 21 ate 33s",
                 "timestamp": __import__("datetime").datetime.now(),
                 "payout": 90,
                 "max_entries": 1,
