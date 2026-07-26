@@ -1978,15 +1978,15 @@ def strategy_name_from_pattern(pattern: str | None) -> str:
     if "minutos sem 2 candles iguais" in lower or "par de cores atrasado" in lower or "pares 18min" in lower:
         return "Pares 18min"
     if "velas 5, 6 e 7" in lower:
-        return "MA21 sem pavio"
+        return "MA21 Sem Pavio"
     if "comprar no segundo 33" in lower:
-        return "MA21 CALL 33s"
+        return "CALL MA21 33s"
     if "operar vendido no segundo 33" in lower or "venda no 33" in lower:
-        return "MA21 PUT 33s"
+        return "PUT MA21 33s"
     if "negativo aos 33s" in lower:
-        return "MA21 virada CALL"
+        return "CALL MA21 Virada"
     if "verde aos 33s" in lower:
-        return "MA21 virada PUT"
+        return "PUT MA21 Virada"
     if "ma21" in lower:
         return "MA21"
     return "Sem estrategia registrada"

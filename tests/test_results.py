@@ -137,7 +137,11 @@ class ResultAccountingTests(unittest.TestCase):
         self.assertEqual(strategy_name_from_pattern("Estrategia 04: verde, vermelho, verde e vermelho"), "Estrategia 04")
         self.assertEqual(strategy_name_from_pattern("Estrategia 05: vermelho, verde, vermelho e verde"), "Estrategia 05")
         self.assertEqual(strategy_name_from_pattern("Estrategia 03: 8 candles verdes seguidos"), "Estrategia 03")
-        self.assertEqual(strategy_name_from_pattern("Vermelho sem pavio abaixo da MA21 + velas 5, 6 e 7"), "MA21 sem pavio")
+        self.assertEqual(strategy_name_from_pattern("Vermelho sem pavio abaixo da MA21 + velas 5, 6 e 7"), "MA21 Sem Pavio")
+        self.assertEqual(strategy_name_from_pattern("Verde rompeu a MA21; comprar no segundo 33"), "CALL MA21 33s")
+        self.assertEqual(strategy_name_from_pattern("Vermelho rompeu a MA21; operar vendido no segundo 33"), "PUT MA21 33s")
+        self.assertEqual(strategy_name_from_pattern("Candle ficou negativo aos 33s e fechou verde positivo"), "CALL MA21 Virada")
+        self.assertEqual(strategy_name_from_pattern("Candle ficou verde aos 33s e fechou vermelho negativo"), "PUT MA21 Virada")
 
     def test_history_without_pattern_is_not_labeled_strategy_01(self) -> None:
         row = normalize_history_trade({"asset": "EURUSD", "result": "WIN", "profit": 1.2}, 0)
