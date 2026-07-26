@@ -191,12 +191,10 @@ def detect_strategy_01_red_below_ma21_before_33(asset: Asset) -> tuple[str | Non
     pullback = current.close - current.open
     if pullback < minimum_pullback:
         return None, "Estrategia 01 armada: aguardando repique para vender melhor", color
-    if current.close >= ma21:
-        return None, "Repique voltou na MA21; aguardando novo sinal", color
 
     pattern = (
         "Estrategia 01: candle vermelho fechou abaixo da media movel real de 21 "
-        "ate 33s; aguardou repique do candle seguinte; venda PUT com entrada e G1 se necessario"
+        "ate 33s; aguardou repique do candle seguinte para vender melhor; PUT com entrada e G1 se necessario"
     )
     return "PUT", pattern, color
 

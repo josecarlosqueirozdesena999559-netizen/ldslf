@@ -87,6 +87,17 @@ class Strategy01RedBelowMa21Tests(unittest.TestCase):
 
         self.assertIsNone(signal)
 
+    def test_operation_candle_uses_pullback_without_ma21_filter(self) -> None:
+        signal = generate_signal(
+            self.make_asset(
+                red_candle(20 * 60, close=0.70, update_second=33),
+                live_green_candle(21 * 60, open_price=0.70, close=1.02, update_second=8),
+            )
+        )
+
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal.direction, "PUT")
+
     def test_no_signal_when_red_closes_above_ma21(self) -> None:
         candles = [low_flat_candle(index * 60) for index in range(20)]
         candles.append(red_candle(20 * 60, close=0.90, update_second=33))
