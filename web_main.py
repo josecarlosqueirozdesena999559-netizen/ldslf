@@ -52,6 +52,7 @@ def today_key() -> str:
 
 STRATEGY_OPTIONS = (
     ("estrategia 01", "Estrategia 01"),
+    ("estrategia 02", "Estrategia 02 - Pares 13min"),
 )
 STRATEGY_KEYS = {key for key, _label in STRATEGY_OPTIONS}
 
@@ -237,6 +238,7 @@ class WebBot:
         self.pair_watch_states: dict[str, dict] = {}
         self.pair_watch_respected = 0
         self.pair_watch_entries = 0
+        self.strategy_02_next_trade_at = 0.0
         self.load_saved_settings()
         self.load_manual_entries()
         self.load_session_score()
@@ -619,7 +621,7 @@ class WebBot:
         return signal
 
     def update_pair_watch_and_find_signal(self) -> Signal | None:
-        if "pares atrasados" not in self.settings.enabled_strategies:
+        if "estrategia 02" not in self.settings.enabled_strategies:
             self.pair_watch_states = {}
             return None
         threshold_seconds = self.settings.pair_watch_minutes * 60
@@ -637,6 +639,7 @@ class WebBot:
             if state.get("signal") and signal_to_trade is None:
                 signal_to_trade = state["signal"]
                 state["signal"] = None
+                self.strategy_02_next_trade_at = now + threshold_seconds
                 self.focused_asset = signal_to_trade.asset
         return signal_to_trade
 
@@ -650,6 +653,8 @@ class WebBot:
                     "alert": False,
                     "elapsed_seconds": 0,
                     "last_colors": self.last_pair_watch_colors(closed),
+                    "equal_pairs_count": 0,
+                    "last_equal_pair_time": "-",
                 }
             )
             self.pair_watch_states[asset.name] = state
@@ -667,27 +672,61 @@ class WebBot:
                 latest_pair_timestamp = int(closed[index].timestamp)
                 latest_pair_color = color
                 break
+        equal_pairs_count, last_equal_pair_time, window_colors = self.pair_watch_window_stats(
+            closed,
+            self.settings.pair_watch_minutes,
+        )
 
         previous_pair_timestamp = state.get("last_pair_timestamp")
         if latest_pair_timestamp and latest_pair_timestamp != previous_pair_timestamp:
             pair_time = datetime.fromtimestamp(latest_pair_timestamp, BULLEX_TIMEZONE)
+            direction = "PUT" if latest_pair_color == "GREEN" else "CALL"
+            signal_color = "RED" if latest_pair_color == "GREEN" else "GREEN"
+            waiting_seconds = max(0, int(self.strategy_02_next_trade_at - time.time()))
+            can_trade_strategy_02 = waiting_seconds <= 0
             state = {
                 "watching": False,
                 "respected": True,
-                "alert": False,
-                "trade_sent": False,
+                "alert": can_trade_strategy_02,
+                "trade_sent": can_trade_strategy_02,
                 "trend": "ALTA" if latest_pair_color == "GREEN" else "BAIXA",
                 "target_color": latest_pair_color,
+                "signal_color": signal_color,
+                "signal_direction": direction,
                 "first_candle_time": pair_time.strftime("%H:%M:%S"),
                 "deadline_time": (pair_time + timedelta(seconds=threshold_seconds)).strftime("%H:%M:%S"),
                 "last_pair_timestamp": latest_pair_timestamp,
                 "elapsed_seconds": 0,
-                "status": f"Respeitou: 2 {self.pair_color_label(latest_pair_color)} as {pair_time.strftime('%H:%M:%S')}",
-                "last_colors": self.last_pair_watch_colors(closed),
+                "status": (
+                    f"Estrategia 02: 2 {self.pair_color_label(latest_pair_color)} as {pair_time.strftime('%H:%M:%S')}; "
+                    f"sinal {self.pair_color_label(signal_color)}"
+                    if can_trade_strategy_02
+                    else f"Estrategia 02 aguardando {self.format_seconds(waiting_seconds)} para nova entrada"
+                ),
+                "last_colors": window_colors,
+                "equal_pairs_count": equal_pairs_count,
+                "last_equal_pair_time": last_equal_pair_time,
                 "completed_timestamp": latest_pair_timestamp,
             }
             if previous_pair_timestamp:
                 self.pair_watch_respected += 1
+            if can_trade_strategy_02:
+                state["signal"] = Signal(
+                    asset=asset.name,
+                    active_id=asset.active_id,
+                    payout=asset.payout,
+                    pattern=(
+                        f"Estrategia 02: 13 minutos; 2 {self.pair_color_label(latest_pair_color)} "
+                        f"iguais as {pair_time.strftime('%H:%M:%S')}; entrar {self.pair_color_label(signal_color)}"
+                    ),
+                    direction=direction,
+                    sequence_color=latest_pair_color,
+                    timestamp=datetime.now(),
+                    strategy_window_seconds=60,
+                    max_entries=1,
+                    enter_on_signal=True,
+                )
+                self.pair_watch_entries += 1
             self.pair_watch_states[asset.name] = state
             return state
 
@@ -696,53 +735,24 @@ class WebBot:
         elapsed_seconds = max(0, last_timestamp - baseline_timestamp)
         deadline_time = baseline_time + timedelta(seconds=threshold_seconds)
 
-        if elapsed_seconds >= threshold_seconds and last_timestamp != state.get("completed_timestamp") and not state.get("trade_sent"):
-            direction = "CALL" if last_color == "GREEN" else "PUT"
-            first_time = datetime.fromtimestamp(last_timestamp, BULLEX_TIMEZONE)
-            state.update(
-                {
-                    "watching": False,
-                    "respected": False,
-                    "alert": True,
-                    "trade_sent": True,
-                    "trend": "ALTA" if last_color == "GREEN" else "BAIXA",
-                    "target_color": last_color,
-                    "first_candle_time": first_time.strftime("%H:%M:%S"),
-                    "deadline_time": deadline_time.strftime("%H:%M:%S"),
-                    "last_pair_timestamp": baseline_timestamp,
-                    "elapsed_seconds": elapsed_seconds,
-                    "completed_timestamp": last_timestamp,
-                    "status": f"{self.settings.pair_watch_minutes}+ min sem 2 iguais; nasceu {self.pair_color_label(last_color)} as {first_time.strftime('%H:%M:%S')}; entrada {direction}",
-                    "last_colors": self.last_pair_watch_colors(closed),
-                    "signal": Signal(
-                        asset=asset.name,
-                        active_id=asset.active_id,
-                        payout=asset.payout,
-                        pattern=f"{self.settings.pair_watch_minutes}+ minutos sem 2 candles iguais; nasceu 1 {self.pair_color_label(last_color)}",
-                        direction=direction,
-                        sequence_color=last_color,
-                        timestamp=datetime.now(),
-                        strategy_window_seconds=60,
-                        max_entries=1,
-                    ),
-                }
-            )
-            self.pair_watch_entries += 1
-        else:
-            state.update(
-                {
-                    "watching": True,
-                    "alert": False,
-                    "trend": "ALTA" if last_color == "GREEN" else "BAIXA",
-                    "target_color": last_color,
-                    "elapsed_seconds": elapsed_seconds,
-                    "first_candle_time": baseline_time.strftime("%H:%M:%S"),
-                    "deadline_time": deadline_time.strftime("%H:%M:%S"),
-                    "last_pair_timestamp": baseline_timestamp,
-                    "status": f"Sem 2 iguais desde {baseline_time.strftime('%H:%M:%S')}; gatilho apos {deadline_time.strftime('%H:%M:%S')}",
-                    "last_colors": self.last_pair_watch_colors(closed),
-                }
-            )
+        state.update(
+            {
+                "watching": True,
+                "alert": False,
+                "trend": "ALTA" if last_color == "GREEN" else "BAIXA",
+                "target_color": last_color,
+                "signal_color": "-",
+                "signal_direction": "-",
+                "elapsed_seconds": elapsed_seconds,
+                "first_candle_time": baseline_time.strftime("%H:%M:%S"),
+                "deadline_time": deadline_time.strftime("%H:%M:%S"),
+                "last_pair_timestamp": baseline_timestamp,
+                "status": "Estrategia 02: aguardando 2 candles seguidos da mesma cor",
+                "last_colors": window_colors,
+                "equal_pairs_count": equal_pairs_count,
+                "last_equal_pair_time": last_equal_pair_time,
+            }
+        )
         self.pair_watch_states[asset.name] = state
         return state
 
@@ -773,10 +783,10 @@ class WebBot:
             self.used_signal_keys.add(self.signal_key_for_signal(signal))
             self.operation_open = True
             self.focused_asset = signal.asset
-            self.status = f"Operando par atrasado: {signal.pattern}"
+            self.status = f"Operando Estrategia 02: {signal.pattern}"
             self.last_signal = signal
             if self.executor:
-                self.executor.current_trade = f"PAR ATRASADO {signal.direction} {signal.asset} - enviando entrada"
+                self.executor.current_trade = f"ESTRATEGIA 02 {signal.direction} {signal.asset} - enviando entrada"
             session_token = self.session_token
         self.trade_thread = threading.Thread(target=self.execute_pair_watch_trade, args=(signal, session_token), daemon=True)
         self.trade_thread.start()
@@ -786,10 +796,11 @@ class WebBot:
             if session_token != self.session_token:
                 return
             account_mode = str(self.last_account.get("mode") or "DEMO")
-            trade = self.executor.execute_single(signal, self.settings, account_mode, "PAR ATRASADO") if self.executor else None
+            trade = self.executor.execute_single(signal, self.settings, account_mode, "ESTRATEGIA 02") if self.executor else None
             if session_token != self.session_token:
                 return
             if trade:
+                self.strategy_02_next_trade_at = time.time() + self.settings.pair_watch_minutes * 60
                 self.mark_asset_signal_cooldown(signal)
                 self.mark_strategy_cooldown(signal)
                 self.add_session_cycle([trade], pattern=signal.pattern)
@@ -864,6 +875,7 @@ class WebBot:
         self.pair_watch_states = {}
         self.pair_watch_respected = 0
         self.pair_watch_entries = 0
+        self.strategy_02_next_trade_at = 0.0
         self.risk.daily_profit = 0.0
         self.last_green_time = "-"
         self.stop_reason = ""
@@ -956,7 +968,7 @@ class WebBot:
                 self.settings.stop_loss = max(0.0, float(payload.stop_loss))
             if payload.payout_min is not None:
                 self.settings.payout_min = max(1, min(100, int(payload.payout_min)))
-            self.settings.enabled_strategies = ["estrategia 01"]
+            self.settings.enabled_strategies = ["estrategia 01", "estrategia 02"]
             self.settings.martingale_multiplier = 2.0
             if payload.schedule_enabled is not None:
                 self.schedule_enabled = False
@@ -994,12 +1006,13 @@ class WebBot:
         self.settings.martingale_multiplier = 2.0
         self.settings.max_martingale = 1
         self.settings.martingale_enabled = True
-        enabled = data.get("enabled_strategies", ["estrategia 01"])
+        self.settings.pair_watch_minutes = 13
+        enabled = data.get("enabled_strategies", ["estrategia 01", "estrategia 02"])
         self.settings.enabled_strategies = [
             key for key in enabled if key in STRATEGY_KEYS
         ] if isinstance(enabled, list) else ["estrategia 01"]
         if not self.settings.enabled_strategies:
-            self.settings.enabled_strategies = ["estrategia 01"]
+            self.settings.enabled_strategies = ["estrategia 01", "estrategia 02"]
         self.schedule_enabled = False
         self.schedule_start = str(data.get("schedule_start", self.schedule_start))
         self.schedule_stop = str(data.get("schedule_stop", self.schedule_stop))
@@ -1339,12 +1352,16 @@ class WebBot:
                     "payout": asset.payout,
                     "trend": state.get("trend", "-"),
                     "target_color": state.get("target_color", "-"),
+                    "signal_color": state.get("signal_color", "-"),
+                    "signal_direction": state.get("signal_direction", "-"),
                     "elapsed_seconds": elapsed,
                     "remaining_seconds": remaining,
                     "first_candle_time": state.get("first_candle_time", "-"),
                     "deadline_time": state.get("deadline_time", "-"),
                     "status": state.get("status", "Aguardando"),
                     "last_colors": state.get("last_colors", "-"),
+                    "equal_pairs_count": int(state.get("equal_pairs_count", 0) or 0),
+                    "last_equal_pair_time": state.get("last_equal_pair_time", "-"),
                     "watching": bool(state.get("watching")),
                     "respected": bool(state.get("respected")),
                     "alert": bool(state.get("alert")),
@@ -1371,6 +1388,22 @@ class WebBot:
         return " ".join(candle_color(candle) for candle in candles[-8:]) or "-"
 
     @staticmethod
+    def pair_watch_window_stats(candles: list[Candle], limit_minutes: int) -> tuple[int, str, str]:
+        window = candles[-max(1, int(limit_minutes)) :]
+        equal_pairs_count = 0
+        last_equal_pair_time = "-"
+        for index in range(1, len(window)):
+            color = candle_color(window[index])
+            if color == candle_color(window[index - 1]):
+                equal_pairs_count += 1
+                last_equal_pair_time = datetime.fromtimestamp(
+                    int(window[index].timestamp),
+                    BULLEX_TIMEZONE,
+                ).strftime("%H:%M:%S")
+        colors = " ".join(candle_color(candle) for candle in window) or "-"
+        return equal_pairs_count, last_equal_pair_time, colors
+
+    @staticmethod
     def pair_color_label(color: str | None) -> str:
         if color == "GREEN":
             return "verde"
@@ -1381,7 +1414,7 @@ class WebBot:
     @staticmethod
     def is_pair_watch_signal(signal: Signal) -> bool:
         pattern = (signal.pattern or "").lower()
-        return pattern.startswith("par de cores atrasado") or "minutos sem 2 candles iguais" in pattern
+        return "estrategia 02" in pattern or pattern.startswith("par de cores atrasado") or "minutos sem 2 candles iguais" in pattern
 
     def refresh_account(self) -> None:
         try:
@@ -1476,6 +1509,8 @@ class WebBot:
         pattern = (signal.pattern or "").lower()
         if "estrategia 01" in pattern:
             return "estrategia 01"
+        if "estrategia 02" in pattern:
+            return "estrategia 02"
         if "estrategia 03" in pattern:
             return "estrategia 03"
         if "estrategia 04" in pattern:
@@ -1493,7 +1528,7 @@ class WebBot:
         if "verde aos 33s" in pattern:
             return "ma21 positive 33"
         if "minutos sem 2 candles iguais" in pattern:
-            return "pares atrasados"
+            return "estrategia 02"
         return pattern
 
     def is_signal_strategy_enabled(self, signal: Signal) -> bool:
@@ -2008,10 +2043,12 @@ def strategy_name_from_pattern(pattern: str | None) -> str:
         return "Estrategia 04"
     if "estrategia 05" in lower:
         return "Estrategia 05"
+    if "estrategia 02" in lower:
+        return "Estrategia 02"
     if "estrategia 01" in lower or "8 candles" in lower or "8 velas" in lower:
         return "Estrategia 01"
-    if "minutos sem 2 candles iguais" in lower or "par de cores atrasado" in lower or "pares 18min" in lower:
-        return "Pares 18min"
+    if "minutos sem 2 candles iguais" in lower or "par de cores atrasado" in lower or "pares 18min" in lower or "pares 13min" in lower:
+        return "Pares 13min"
     if "velas 5, 6 e 7" in lower:
         return "MA21 Sem Pavio"
     if "comprar no segundo 33" in lower:
@@ -2468,7 +2505,7 @@ HTML = r"""
       $("pausePanel").classList.add("hidden");
       $("analysisPanel").classList.remove("hidden");
       $("asset").textContent = data.asset || "Aguardando ativo";
-      $("sequence").textContent = `EstratÃ©gia do momento: ${data.strategy || "Estrategia 01"} - E04 termina vermelho CALL, E05 termina verde PUT, estrategia 01/03, MA21 ou pares 18min`;
+      $("sequence").textContent = `EstratÃ©gia do momento: ${data.strategy || "Estrategia 01"} - E04 termina vermelho CALL, E05 termina verde PUT, estrategia 01/03, MA21 ou pares 13min`;
       $("signal").textContent = data.signal ? `Sinal: ${data.signal.direction} (${data.signal.pattern})` : "Sinal: aguardando estrategia";
       const last = data.candles[data.candles.length - 1];
       if (last) {

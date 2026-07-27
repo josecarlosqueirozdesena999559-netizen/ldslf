@@ -1690,8 +1690,8 @@
             </button>
           </li>
           <li>
-            <button id="navPairWatch" class="nav-btn hidden" onclick="showPairWatchPage()" title="Pares 18min">
-              <i class="fa-solid fa-layer-group"></i> <span>Pares 18min</span>
+            <button id="navPairWatch" class="nav-btn hidden" onclick="showPairWatchPage()" title="Pares 13min">
+              <i class="fa-solid fa-layer-group"></i> <span>Pares 13min</span>
             </button>
           </li>
           <li>
@@ -2030,13 +2030,13 @@
         </div>
       </section>
 
-      <!-- PAGE: PARES 18MIN -->
+      <!-- PAGE: PARES 13MIN -->
       <section id="pairWatchPage" class="hidden">
         <div class="panel">
           <div class="sequences-header-row">
             <div>
-              <h2 class="panel-title" style="margin-bottom: 5px;"><i class="fa-solid fa-layer-group"></i> Monitor Pares 18min</h2>
-              <p style="color: var(--text-muted); font-size: 13px;">Conta o tempo sem nascer dois candles iguais; com 18min ou mais, a proxima vela gera entrada pela cor dela.</p>
+              <h2 class="panel-title" style="margin-bottom: 5px;"><i class="fa-solid fa-layer-group"></i> Monitor Pares 13min</h2>
+              <p style="color: var(--text-muted); font-size: 13px;">Mostra os ultimos 13 candles, quantas vezes bateram duas cores iguais e o horario real do ultimo par.</p>
             </div>
             <button onclick="refresh()" class="btn-refresh">
               <i class="fa-solid fa-rotate"></i> Atualizar Agora
@@ -2044,20 +2044,6 @@
           </div>
 
           <div class="pair-watch-widget" style="margin-top: 18px;">
-            <div class="pair-watch-stats">
-              <div class="pair-watch-stat">
-                <span>Respeitou</span>
-                <strong id="pairWatchRespected">0</strong>
-              </div>
-              <div class="pair-watch-stat">
-                <span>Entradas</span>
-                <strong id="pairWatchEntries">0</strong>
-              </div>
-            </div>
-            <div class="pair-watch-active">
-              <div>Ativo: <span id="pairWatchActiveAsset" class="val">-</span></div>
-              <div>Status: <span id="pairWatchActiveStatus" class="val">Aguardando</span></div>
-            </div>
             <div class="table-container">
               <table class="data-table">
                 <thead>
@@ -2065,17 +2051,15 @@
                     <th>Ativo</th>
                     <th>Payout</th>
                     <th>Tendencia</th>
-                    <th>Ultima cor</th>
-                    <th>Referencia</th>
-                    <th>Gatilho</th>
-                    <th>Tempo</th>
-                    <th>Status</th>
-                    <th>Ultimas cores</th>
+                    <th>Cores</th>
+                    <th>Sinal</th>
+                    <th>2 iguais</th>
+                    <th>Hora real</th>
                   </tr>
                 </thead>
                 <tbody id="pairWatchRows">
                   <tr>
-                    <td colspan="9" style="text-align: center; color: var(--text-muted);">Aguardando ativos monitorados.</td>
+                    <td colspan="7" style="text-align: center; color: var(--text-muted);">Aguardando ativos monitorados.</td>
                   </tr>
                 </tbody>
               </table>
@@ -2563,7 +2547,7 @@
         showLogin();
         return;
       }
-      setPage("pairWatchPage", "Pares 18min");
+      setPage("pairWatchPage", "Pares 13min");
       startPolling();
       await refresh();
     }
@@ -3838,38 +3822,25 @@
 
     function renderPairWatchPage(pairWatch) {
       if (!$("pairWatchRows")) return;
-      $("pairWatchRespected").textContent = pairWatch.respected ?? 0;
-      $("pairWatchEntries").textContent = pairWatch.entries ?? 0;
-
-      const active = pairWatch.active || null;
-      $("pairWatchActiveAsset").textContent = active?.asset ? formatAssetName(active.asset) : "-";
-      $("pairWatchActiveStatus").textContent = active
-        ? `${active.status || "Monitorando"} | nasceu ${active.first_candle_time || "-"} | limite ${active.deadline_time || "-"}`
-        : `Limite ${pairWatch.limit_minutes || 18}min`;
 
       const rows = pairWatch.assets || [];
       if (!rows.length) {
-        $("pairWatchRows").innerHTML = `<tr><td colspan="9" style="text-align: center; color: var(--text-muted);">Aguardando ativos monitorados.</td></tr>`;
+        $("pairWatchRows").innerHTML = `<tr><td colspan="7" style="text-align: center; color: var(--text-muted);">Aguardando ativos monitorados.</td></tr>`;
         return;
       }
 
       $("pairWatchRows").innerHTML = rows.map(row => {
-        const color = row.target_color === "GREEN" ? "green" : row.target_color === "RED" ? "red" : "";
-        const badgeClass = row.alert ? "alert" : color;
-        const badge = row.target_color === "GREEN" ? "G" : row.target_color === "RED" ? "R" : "-";
-        const elapsed = formatPairWatchTime(row.elapsed_seconds || 0);
-        const remaining = row.watching ? `restam ${formatPairWatchTime(row.remaining_seconds || 0)}` : elapsed;
+        const signalClass = row.signal_color === "GREEN" ? "green" : row.signal_color === "RED" ? "red" : "";
+        const signalLabel = row.signal_color === "GREEN" ? "VERDE / CALL" : row.signal_color === "RED" ? "VERMELHO / PUT" : "-";
         return `
           <tr>
             <td><strong>${formatAssetName(row.asset)}</strong></td>
             <td>${row.payout ?? 0}%</td>
             <td>${row.trend || "-"}</td>
-            <td><span class="pair-watch-badge ${badgeClass}">${badge}</span></td>
-            <td>${row.first_candle_time || "-"}</td>
-            <td>${row.deadline_time || "-"}</td>
-            <td>${remaining}</td>
-            <td><span style="font-size: 13px; color: var(--text-muted);">${row.status || "Aguardando"}</span></td>
             <td>${formatPairWatchColors(row.last_colors || "-")}</td>
+            <td><span class="pair-watch-badge ${signalClass}" style="min-width: 92px;">${signalLabel}</span></td>
+            <td>${row.equal_pairs_count ?? 0}</td>
+            <td>${row.last_equal_pair_time || "-"}</td>
           </tr>
         `;
       }).join("");

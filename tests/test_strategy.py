@@ -51,7 +51,7 @@ def live_green_candle(timestamp: int, open_price: float, close: float, update_se
 
 class Strategy01RedBelowMa21Tests(unittest.TestCase):
     def make_asset(self, last: Candle, current: Candle | None = None) -> Asset:
-        candles = [flat_candle(index * 60) for index in range(20)]
+        candles = [flat_candle(index * 60) for index in range(21)]
         candles.append(last)
         if current:
             candles.append(current)
@@ -60,8 +60,8 @@ class Strategy01RedBelowMa21Tests(unittest.TestCase):
     def test_red_below_real_ma21_before_33_seconds_sells_after_pullback_with_one_reentry(self) -> None:
         signal = generate_signal(
             self.make_asset(
-                red_candle(20 * 60, close=0.70, update_second=33),
-                live_green_candle(21 * 60, open_price=0.70, close=0.76, update_second=8),
+                red_candle(21 * 60, close=0.70, update_second=33),
+                live_green_candle(22 * 60, open_price=0.70, close=0.76, update_second=8),
             )
         )
 
@@ -80,8 +80,8 @@ class Strategy01RedBelowMa21Tests(unittest.TestCase):
     def test_no_signal_until_next_candle_pulls_back(self) -> None:
         signal = generate_signal(
             self.make_asset(
-                red_candle(20 * 60, close=0.70, update_second=33),
-                live_green_candle(21 * 60, open_price=0.70, close=0.72, update_second=8),
+                red_candle(21 * 60, close=0.70, update_second=33),
+                live_green_candle(22 * 60, open_price=0.70, close=0.72, update_second=8),
             )
         )
 
@@ -90,8 +90,8 @@ class Strategy01RedBelowMa21Tests(unittest.TestCase):
     def test_operation_candle_uses_pullback_without_ma21_filter(self) -> None:
         signal = generate_signal(
             self.make_asset(
-                red_candle(20 * 60, close=0.70, update_second=33),
-                live_green_candle(21 * 60, open_price=0.70, close=1.02, update_second=8),
+                red_candle(21 * 60, close=0.70, update_second=33),
+                live_green_candle(22 * 60, open_price=0.70, close=1.02, update_second=8),
             )
         )
 
@@ -99,8 +99,19 @@ class Strategy01RedBelowMa21Tests(unittest.TestCase):
         self.assertEqual(signal.direction, "PUT")
 
     def test_no_signal_when_red_closes_above_ma21(self) -> None:
+        candles = [low_flat_candle(index * 60) for index in range(21)]
+        candles.append(red_candle(21 * 60, close=0.90, update_second=33))
+        asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
+
+        signal = generate_signal(asset)
+
+        self.assertIsNone(signal)
+
+    def test_no_signal_when_ma21_points_up(self) -> None:
         candles = [low_flat_candle(index * 60) for index in range(20)]
-        candles.append(red_candle(20 * 60, close=0.90, update_second=33))
+        candles.append(flat_candle(20 * 60))
+        candles.append(red_candle(21 * 60, close=0.61, update_second=33))
+        candles.append(live_green_candle(22 * 60, open_price=0.61, close=0.70, update_second=8))
         asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
 
         signal = generate_signal(asset)
@@ -108,12 +119,12 @@ class Strategy01RedBelowMa21Tests(unittest.TestCase):
         self.assertIsNone(signal)
 
     def test_no_signal_when_red_below_ma21_closes_after_33_seconds(self) -> None:
-        signal = generate_signal(self.make_asset(red_candle(20 * 60, close=0.70, update_second=34)))
+        signal = generate_signal(self.make_asset(red_candle(21 * 60, close=0.70, update_second=34)))
 
         self.assertIsNone(signal)
 
     def test_no_signal_when_last_candle_is_green(self) -> None:
-        signal = generate_signal(self.make_asset(green_candle(20 * 60, close=1.20, update_second=20)))
+        signal = generate_signal(self.make_asset(green_candle(21 * 60, close=1.20, update_second=20)))
 
         self.assertIsNone(signal)
 

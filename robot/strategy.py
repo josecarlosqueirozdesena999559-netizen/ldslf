@@ -18,6 +18,7 @@ STRATEGY_01_PULLBACK_BODY_RATIO = 0.15
 STRATEGY_01_MIN_PULLBACK_PRICE_RATIO = 0.00005
 STRATEGY_PATTERN_MARKERS = (
     "estrategia 01",
+    "estrategia 02",
 )
 
 
@@ -67,6 +68,14 @@ def moving_average_at(candles: list[Candle], index: int, period: int = MOVING_AV
         return None
     closes = [candle.close for candle in candles[index - period + 1 : index + 1]]
     return sum(closes) / period
+
+
+def moving_average_slope_at(candles: list[Candle], index: int, period: int = MOVING_AVERAGE_PERIOD) -> float | None:
+    current = moving_average_at(candles, index, period)
+    previous = moving_average_at(candles, index - 1, period)
+    if current is None or previous is None:
+        return None
+    return current - previous
 
 
 def candle_close_second(candle: Candle) -> int:
@@ -174,6 +183,11 @@ def detect_strategy_01_red_below_ma21_before_33(asset: Asset) -> tuple[str | Non
     ma21 = moving_average_at(closed, anchor_index)
     if ma21 is None:
         return None, "Aguardando MA21 real", color
+    ma21_slope = moving_average_slope_at(closed, anchor_index)
+    if ma21_slope is None:
+        return None, "Aguardando inclinacao da MA21 real", color
+    if ma21_slope >= 0:
+        return None, "MA21 real nao esta apontando para baixo", color
     if anchor.close >= ma21:
         return None, "Candle vermelho fechou acima da MA21", color
     if candle_close_second(anchor) > 33:

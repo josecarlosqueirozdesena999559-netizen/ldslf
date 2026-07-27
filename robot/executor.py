@@ -8,7 +8,12 @@ from models.settings import BotSettings
 from models.trade import Signal, TradeResult
 from robot.martingale import attempt_name, get_next_value
 from robot.risk import RiskManager
-from robot.strategy import is_allowed_strategy_signal
+from robot.strategy import (
+    CANDLE_LOOKBACK,
+    STRATEGY_01_MIN_PULLBACK_PRICE_RATIO,
+    STRATEGY_01_PULLBACK_BODY_RATIO,
+    is_allowed_strategy_signal,
+)
 from storage.history import HistoryStore
 
 
@@ -169,6 +174,8 @@ class TradeExecutor:
             balance_before = balance_after
             self.current_trade = f"Parcial {signal.asset}; fazendo G{step} R$ {next_value:.2f}"
             self.logger.info("[MARTINGALE] G%s valor %.2f", step, next_value)
+            if not self.wait_strategy_01_reentry_pullback(signal, settings, step, window_seconds):
+                return last_trade
 
     def execute_single(self, signal: Signal, settings: BotSettings, account_mode: str, note: str) -> TradeResult | None:
         if not self._operation_lock.acquire(blocking=False):
@@ -283,6 +290,50 @@ class TradeExecutor:
                 time.time() + wait,
                 f"Aguardando segundo {entry_second} para entrada",
             )
+
+    def wait_strategy_01_reentry_pullback(
+        self,
+        signal: Signal,
+        settings: BotSettings,
+        step: int,
+        window_seconds: int,
+    ) -> bool:
+        pattern = (signal.pattern or "").lower()
+        if step <= 0 or signal.direction != "PUT" or "estrategia 01" not in pattern or "repique" not in pattern:
+            return True
+
+        while True:
+            elapsed = (datetime.now() - signal.timestamp).total_seconds()
+            if elapsed >= window_seconds:
+                window_minutes = max(1, int(window_seconds // 60))
+                self.logger.info("[MARTINGALE] G%s cancelado: janela encerrada apos %s minutos", step, window_minutes)
+                self.current_trade = f"G{step} cancelado: estrategia encerrou em {window_minutes} minutos"
+                return False
+
+            candles = self.client.get_realtime_candles(signal.asset, settings.timeframe, CANDLE_LOOKBACK)
+            if self.has_strategy_01_pullback_for_reentry(candles):
+                self.logger.info("[MARTINGALE] G%s repique confirmado para vender melhor", step)
+                self.current_trade = f"G{step}: repique confirmado; vendendo melhor"
+                return True
+
+            remaining = max(0.0, window_seconds - elapsed)
+            self.current_trade = f"G{step}: aguardando subir um pouco para vender ({remaining:.1f}s)"
+            time.sleep(ENTRY_POLL_SECONDS)
+
+    @staticmethod
+    def has_strategy_01_pullback_for_reentry(candles) -> bool:
+        closed = [candle for candle in candles if getattr(candle, "closed", False)]
+        current = candles[-1] if candles else None
+        if not closed or current is None or getattr(current, "closed", False):
+            return False
+
+        anchor = closed[-1]
+        anchor_body = abs(anchor.open - anchor.close)
+        minimum_pullback = max(
+            anchor_body * STRATEGY_01_PULLBACK_BODY_RATIO,
+            abs(anchor.close) * STRATEGY_01_MIN_PULLBACK_PRICE_RATIO,
+        )
+        return current.close - current.open >= minimum_pullback
 
     def resolve_robot_order_result(
         self,

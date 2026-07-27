@@ -4,6 +4,7 @@ import json
 from unittest.mock import patch
 
 from models.settings import BotSettings
+from models.candle import Candle
 from models.trade import TradeResult
 from robot.executor import TradeExecutor
 from robot.engine import RobotEngine
@@ -117,6 +118,86 @@ class ResultAccountingTests(unittest.TestCase):
 
         self.assertIsNone(executor.execute_cycle(signal, BotSettings(), "DEMO"))
         self.assertIn("Falha ao abrir ordem", executor.current_trade)
+
+    def test_strategy_01_g1_waits_pullback_before_reentry(self) -> None:
+        anchor = Candle(open=1.0, close=0.70, high=1.0, low=0.70, timestamp=60, closed=True)
+        weak_pullback = Candle(open=0.70, close=0.72, high=0.72, low=0.70, timestamp=120, closed=False)
+        enough_pullback = Candle(open=0.70, close=0.76, high=0.76, low=0.70, timestamp=120, closed=False)
+
+        self.assertFalse(TradeExecutor.has_strategy_01_pullback_for_reentry([anchor, weak_pullback]))
+        self.assertTrue(TradeExecutor.has_strategy_01_pullback_for_reentry([anchor, enough_pullback]))
+
+    def test_pair_watch_counts_equal_pairs_in_13_candles(self) -> None:
+        candles = [
+            Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=60, closed=True),
+            Candle(open=1.0, close=1.2, high=1.2, low=1.0, timestamp=120, closed=True),
+            Candle(open=1.2, close=1.0, high=1.2, low=1.0, timestamp=180, closed=True),
+            Candle(open=1.1, close=0.9, high=1.1, low=0.9, timestamp=240, closed=True),
+        ]
+
+        count, last_time, colors = WebBot.pair_watch_window_stats(candles, 13)
+
+        self.assertEqual(count, 2)
+        self.assertEqual(last_time, "21:04:00")
+        self.assertEqual(colors, "GREEN GREEN RED RED")
+
+    def test_strategy_02_enters_opposite_color_on_equal_pair(self) -> None:
+        bot = object.__new__(WebBot)
+        bot.settings = BotSettings(pair_watch_minutes=13)
+        bot.pair_watch_states = {}
+        bot.pair_watch_respected = 0
+        bot.pair_watch_entries = 0
+        bot.strategy_02_next_trade_at = 0.0
+        asset = type(
+            "Asset",
+            (),
+            {
+                "name": "EURUSD",
+                "active_id": 1,
+                "payout": 90,
+                "candles": [
+                    Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=60, closed=True),
+                    Candle(open=1.1, close=1.2, high=1.2, low=1.1, timestamp=120, closed=True),
+                ],
+            },
+        )()
+
+        with patch("web_main.time.time", return_value=200):
+            state = bot.update_pair_watch_asset(asset, 200, 13 * 60)
+
+        self.assertTrue(state["alert"])
+        self.assertEqual(state["signal"].direction, "PUT")
+        self.assertEqual(state["signal_color"], "RED")
+        self.assertIn("Estrategia 02", state["signal"].pattern)
+
+    def test_strategy_02_waits_13_minutes_between_entries(self) -> None:
+        bot = object.__new__(WebBot)
+        bot.settings = BotSettings(pair_watch_minutes=13)
+        bot.pair_watch_states = {}
+        bot.pair_watch_respected = 0
+        bot.pair_watch_entries = 0
+        bot.strategy_02_next_trade_at = 980.0
+        asset = type(
+            "Asset",
+            (),
+            {
+                "name": "EURUSD",
+                "active_id": 1,
+                "payout": 90,
+                "candles": [
+                    Candle(open=1.2, close=1.0, high=1.2, low=1.0, timestamp=60, closed=True),
+                    Candle(open=1.1, close=0.9, high=1.1, low=0.9, timestamp=120, closed=True),
+                ],
+            },
+        )()
+
+        with patch("web_main.time.time", return_value=300):
+            state = bot.update_pair_watch_asset(asset, 300, 13 * 60)
+
+        self.assertFalse(state["alert"])
+        self.assertNotIn("signal", state)
+        self.assertEqual(state["signal_color"], "GREEN")
+        self.assertIn("aguardando", state["status"])
 
     def test_strategy_cooldown_blocks_same_family_until_signal_changes(self) -> None:
         engine = object.__new__(RobotEngine)

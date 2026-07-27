@@ -13,5 +13,5 @@ class BotSettings:
     martingale_multiplier: float = 2.0
     asset_limit: int = 10
     scan_seconds: int = 3600
-    pair_watch_minutes: int = 18
-    enabled_strategies: list[str] = field(default_factory=lambda: ["estrategia 01"])
+    pair_watch_minutes: int = 13
+    enabled_strategies: list[str] = field(default_factory=lambda: ["estrategia 01", "estrategia 02"])

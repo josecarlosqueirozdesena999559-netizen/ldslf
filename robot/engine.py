@@ -55,6 +55,7 @@ class RobotEngine:
         self.asset_strategy_cooldowns: dict[str, set[str]] = {}
         self.negative_at_33_marks: set[tuple[str, int]] = set()
         self.positive_at_33_marks: set[tuple[str, int]] = set()
+        self.strategy_02_next_trade_at = 0.0
         self.trade_thread: threading.Thread | None = None
         self.scan_deadline = 0.0
         self.last_green_time = "-"
@@ -268,6 +269,7 @@ class RobotEngine:
             if state.get("signal") and signal_to_trade is None:
                 signal_to_trade = state["signal"]
                 state["signal"] = None
+                self.strategy_02_next_trade_at = now + threshold_seconds
 
         self.update_pair_watch_focus()
         return signal_to_trade
@@ -303,21 +305,48 @@ class RobotEngine:
         previous_pair_timestamp = state.get("last_pair_timestamp")
         if latest_pair_timestamp and latest_pair_timestamp != previous_pair_timestamp:
             pair_time = datetime.fromtimestamp(latest_pair_timestamp, BULLEX_TIMEZONE)
+            direction = "PUT" if latest_pair_color == "GREEN" else "CALL"
+            signal_color = "RED" if latest_pair_color == "GREEN" else "GREEN"
+            waiting_seconds = max(0, int(self.strategy_02_next_trade_at - time.time()))
+            can_trade_strategy_02 = waiting_seconds <= 0
             state = {
                 "watching": False,
                 "respected": True,
-                "alert": False,
-                "trade_sent": False,
+                "alert": can_trade_strategy_02,
+                "trade_sent": can_trade_strategy_02,
                 "trend": "ALTA" if latest_pair_color == "GREEN" else "BAIXA",
                 "target_color": latest_pair_color,
+                "signal_color": signal_color,
+                "signal_direction": direction,
                 "first_candle_time": pair_time.strftime("%H:%M:%S"),
                 "deadline_time": (pair_time + timedelta(seconds=threshold_seconds)).strftime("%H:%M:%S"),
                 "last_pair_timestamp": latest_pair_timestamp,
                 "elapsed_seconds": 0,
-                "status": f"Respeitou: 2 {self._pair_color_label(latest_pair_color)} as {pair_time.strftime('%H:%M:%S')}",
+                "status": (
+                    f"Estrategia 02: 2 {self._pair_color_label(latest_pair_color)} as {pair_time.strftime('%H:%M:%S')}; "
+                    f"sinal {self._pair_color_label(signal_color)}"
+                    if can_trade_strategy_02
+                    else f"Estrategia 02 aguardando {self._format_seconds(waiting_seconds)} para nova entrada"
+                ),
                 "last_colors": self._last_pair_watch_colors(closed),
                 "completed_timestamp": latest_pair_timestamp,
             }
+            if can_trade_strategy_02:
+                state["signal"] = Signal(
+                    asset=asset.name,
+                    active_id=asset.active_id,
+                    payout=asset.payout,
+                    pattern=(
+                        f"Estrategia 02: 13 minutos; 2 {self._pair_color_label(latest_pair_color)} "
+                        f"iguais as {pair_time.strftime('%H:%M:%S')}; entrar {self._pair_color_label(signal_color)}"
+                    ),
+                    direction=direction,
+                    sequence_color=latest_pair_color,
+                    timestamp=datetime.now(),
+                    strategy_window_seconds=60,
+                    max_entries=1,
+                    enter_on_signal=True,
+                )
             self.pair_watch_states[asset.name] = state
             return state
 
@@ -326,52 +355,20 @@ class RobotEngine:
         elapsed_seconds = max(0, last_timestamp - baseline_timestamp)
         deadline_time = baseline_time + timedelta(seconds=threshold_seconds)
 
-        if elapsed_seconds >= threshold_seconds and last_timestamp != state.get("completed_timestamp") and not state.get("trade_sent"):
-            direction = "CALL" if last_color == "GREEN" else "PUT"
-            first_time = datetime.fromtimestamp(last_timestamp, BULLEX_TIMEZONE)
-            state.update(
-                {
-                    "watching": False,
-                    "respected": False,
-                    "alert": True,
-                    "trade_sent": True,
-                    "trend": "ALTA" if last_color == "GREEN" else "BAIXA",
-                    "target_color": last_color,
-                    "first_candle_time": first_time.strftime("%H:%M:%S"),
-                    "deadline_time": deadline_time.strftime("%H:%M:%S"),
-                    "last_pair_timestamp": baseline_timestamp,
-                    "elapsed_seconds": elapsed_seconds,
-                    "completed_timestamp": last_timestamp,
-                    "status": f"{self.settings.pair_watch_minutes}+ min sem 2 iguais; nasceu {self._pair_color_label(last_color)} as {first_time.strftime('%H:%M:%S')}; entrada {direction}",
-                    "last_colors": self._last_pair_watch_colors(closed),
-                    "signal": Signal(
-                        asset=asset.name,
-                        active_id=asset.active_id,
-                        payout=asset.payout,
-                        pattern=f"{self.settings.pair_watch_minutes}+ minutos sem 2 candles iguais; nasceu 1 {self._pair_color_label(last_color)}",
-                        direction=direction,
-                        sequence_color=last_color,
-                        timestamp=datetime.now(),
-                        strategy_window_seconds=60,
-                        max_entries=1,
-                    ),
-                }
-            )
-        else:
-            state.update(
-                {
-                    "watching": True,
-                    "alert": False,
-                    "trend": "ALTA" if last_color == "GREEN" else "BAIXA",
-                    "target_color": last_color,
-                    "elapsed_seconds": elapsed_seconds,
-                    "first_candle_time": baseline_time.strftime("%H:%M:%S"),
-                    "deadline_time": deadline_time.strftime("%H:%M:%S"),
-                    "last_pair_timestamp": baseline_timestamp,
-                    "status": f"Sem 2 iguais desde {baseline_time.strftime('%H:%M:%S')}; gatilho apos {deadline_time.strftime('%H:%M:%S')}",
-                    "last_colors": self._last_pair_watch_colors(closed),
-                }
-            )
+        state.update(
+            {
+                "watching": True,
+                "alert": False,
+                "trend": "ALTA" if last_color == "GREEN" else "BAIXA",
+                "target_color": last_color,
+                "elapsed_seconds": elapsed_seconds,
+                "first_candle_time": baseline_time.strftime("%H:%M:%S"),
+                "deadline_time": deadline_time.strftime("%H:%M:%S"),
+                "last_pair_timestamp": baseline_timestamp,
+                "status": "Estrategia 02: aguardando 2 candles seguidos da mesma cor",
+                "last_colors": self._last_pair_watch_colors(closed),
+            }
+        )
         self.pair_watch_states[asset.name] = state
         return state
 
@@ -445,14 +442,17 @@ class RobotEngine:
                 return
             self.state.focused_asset = signal.asset
             self.operation_open = True
-        self.state.status = f"Operando par atrasado: {signal.pattern}"
+        self.state.status = f"Operando Estrategia 02: {signal.pattern}"
         self.trade_thread = threading.Thread(target=self.execute_pair_watch_trade, args=(signal,), daemon=True)
         self.trade_thread.start()
 
     def execute_pair_watch_trade(self, signal: Signal) -> None:
         try:
-            self.executor.execute_single(signal, self.settings, self.account_mode, "PAR ATRASADO")
-            self.mark_asset_signal_cooldown(signal)
+            trade = self.executor.execute_single(signal, self.settings, self.account_mode, "ESTRATEGIA 02")
+            if trade:
+                self.strategy_02_next_trade_at = time.time() + self.settings.pair_watch_minutes * 60
+                self.mark_asset_signal_cooldown(signal)
+                self.mark_strategy_cooldown(signal)
             self.state.status = (
                 f"Monitorando pares de cores: limite {self.settings.pair_watch_minutes} minutos"
             )
@@ -481,7 +481,7 @@ class RobotEngine:
     @staticmethod
     def is_pair_watch_signal(signal: Signal) -> bool:
         pattern = (signal.pattern or "").lower()
-        return pattern.startswith("par de cores atrasado") or "minutos sem 2 candles iguais" in pattern
+        return "estrategia 02" in pattern or pattern.startswith("par de cores atrasado") or "minutos sem 2 candles iguais" in pattern
 
     @staticmethod
     def signal_key(asset, signal: Signal) -> tuple:
@@ -534,6 +534,8 @@ class RobotEngine:
         pattern = (signal.pattern or "").lower()
         if "estrategia 01" in pattern:
             return "estrategia 01"
+        if "estrategia 02" in pattern:
+            return "estrategia 02"
         if "estrategia 03" in pattern:
             return "estrategia 03"
         if "estrategia 04" in pattern:
@@ -551,13 +553,13 @@ class RobotEngine:
         if "verde aos 33s" in pattern:
             return "ma21 positive 33"
         if "minutos sem 2 candles iguais" in pattern:
-            return "pares atrasados"
+            return "estrategia 02"
         return pattern
 
     @staticmethod
     def strategy_priority(signal: Signal) -> int:
         pattern = (signal.pattern or "").lower()
-        if "minutos sem 2 candles iguais" in pattern or "par de cores atrasado" in pattern:
+        if "estrategia 02" in pattern or "minutos sem 2 candles iguais" in pattern or "par de cores atrasado" in pattern:
             return 95
         if "rompeu a ma21" in pattern:
             return 90
