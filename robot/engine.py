@@ -96,9 +96,11 @@ class RobotEngine:
                     self.update_candles()
                     signal = self.update_pair_watch_and_find_signal()
                 elif self.auto_trade and not self.operation_open:
-                    signal = self.update_market_and_find_signal()
-                    if not signal:
+                    signal = None
+                    if "estrategia 02" in self.settings.enabled_strategies:
                         signal = self.update_pair_watch_and_find_signal()
+                    if not signal and any(key != "estrategia 02" for key in self.settings.enabled_strategies):
+                        signal = self.update_market_and_find_signal()
                 else:
                     self.update_candles()
                     self.update_focus_asset()
@@ -209,7 +211,7 @@ class RobotEngine:
             if key in self.positive_at_33_marks:
                 candle.positive_at_33 = True
 
-        current = asset.current_candle
+        current = getattr(asset, "current_candle", asset.candles[-1] if asset.candles else None)
         if not current or current.closed:
             return
         elapsed = int(current.update_timestamp or time.time()) - int(current.timestamp)
@@ -255,7 +257,7 @@ class RobotEngine:
         )
         threshold_seconds = self.settings.pair_watch_minutes * 60
         now = time.time()
-        signal_to_trade: Signal | None = None
+        signals: list[tuple[Signal, int]] = []
 
         for asset in self.state.assets:
             if not asset.open or asset.payout < self.settings.payout_min:
@@ -266,12 +268,15 @@ class RobotEngine:
                 continue
 
             state = self.update_pair_watch_asset(asset, now, threshold_seconds)
-            if state.get("signal") and signal_to_trade is None:
-                signal_to_trade = state["signal"]
+            if state.get("signal"):
+                signals.append((state["signal"], int(state.get("elapsed_seconds", 0) or 0)))
                 state["signal"] = None
-                self.strategy_02_next_trade_at = now + threshold_seconds
 
         self.update_pair_watch_focus()
+        if not signals:
+            return None
+        signal_to_trade, _elapsed = max(signals, key=lambda item: (item[1], item[0].payout))
+        self.state.focused_asset = signal_to_trade.asset
         return signal_to_trade
 
     def update_pair_watch_asset(self, asset, now: float, threshold_seconds: int) -> dict:
@@ -292,6 +297,7 @@ class RobotEngine:
         last = closed[-1]
         last_color = candle_color(last)
         last_timestamp = int(last.timestamp)
+        current = getattr(asset, "current_candle", asset.candles[-1] if asset.candles else None)
 
         latest_pair_timestamp = None
         latest_pair_color = None
@@ -305,59 +311,26 @@ class RobotEngine:
         previous_pair_timestamp = state.get("last_pair_timestamp")
         if latest_pair_timestamp and latest_pair_timestamp != previous_pair_timestamp:
             pair_time = datetime.fromtimestamp(latest_pair_timestamp, BULLEX_TIMEZONE)
-            pair_baseline_timestamp = int(previous_pair_timestamp or closed[0].timestamp)
-            should_follow_pair = latest_pair_timestamp - pair_baseline_timestamp >= threshold_seconds
-            direction = (
-                "CALL"
-                if latest_pair_color == "GREEN" and should_follow_pair
-                else "PUT"
-                if latest_pair_color == "GREEN"
-                else "PUT"
-                if should_follow_pair
-                else "CALL"
-            )
-            signal_color = latest_pair_color if should_follow_pair else "RED" if latest_pair_color == "GREEN" else "GREEN"
-            waiting_seconds = max(0, int(self.strategy_02_next_trade_at - time.time()))
-            can_trade_strategy_02 = waiting_seconds <= 0
-            signal_mode = "seguir ultimo candle" if should_follow_pair else "cor oposta"
             state = {
                 "watching": False,
                 "respected": True,
-                "alert": can_trade_strategy_02,
-                "trade_sent": can_trade_strategy_02,
+                "alert": False,
+                "trade_sent": False,
                 "trend": "ALTA" if latest_pair_color == "GREEN" else "BAIXA",
                 "target_color": latest_pair_color,
-                "signal_color": signal_color,
-                "signal_direction": direction,
+                "signal_color": "-",
+                "signal_direction": "-",
                 "first_candle_time": pair_time.strftime("%H:%M:%S"),
                 "deadline_time": (pair_time + timedelta(seconds=threshold_seconds)).strftime("%H:%M:%S"),
                 "last_pair_timestamp": latest_pair_timestamp,
                 "elapsed_seconds": 0,
                 "status": (
-                    f"Estrategia 02: 2 {self._pair_color_label(latest_pair_color)} as {pair_time.strftime('%H:%M:%S')}; "
-                    f"sinal {self._pair_color_label(signal_color)} ({signal_mode})"
-                    if can_trade_strategy_02
-                    else f"Estrategia 02 aguardando {self._format_seconds(waiting_seconds)} para nova entrada"
+                    f"Estrategia 02: 2 {self._pair_color_label(latest_pair_color)} as "
+                    f"{pair_time.strftime('%H:%M:%S')}; contador reiniciado"
                 ),
                 "last_colors": self._last_pair_watch_colors(closed),
                 "completed_timestamp": latest_pair_timestamp,
             }
-            if can_trade_strategy_02:
-                state["signal"] = Signal(
-                    asset=asset.name,
-                    active_id=asset.active_id,
-                    payout=asset.payout,
-                    pattern=(
-                        f"Estrategia 02: 13 minutos; 2 {self._pair_color_label(latest_pair_color)} "
-                        f"iguais as {pair_time.strftime('%H:%M:%S')}; {signal_mode}; entrar {self._pair_color_label(signal_color)}"
-                    ),
-                    direction=direction,
-                    sequence_color=latest_pair_color,
-                    timestamp=datetime.now(),
-                    strategy_window_seconds=60,
-                    max_entries=1,
-                    enter_on_signal=True,
-                )
             self.pair_watch_states[asset.name] = state
             return state
 
@@ -365,21 +338,55 @@ class RobotEngine:
         baseline_time = datetime.fromtimestamp(baseline_timestamp, BULLEX_TIMEZONE)
         elapsed_seconds = max(0, last_timestamp - baseline_timestamp)
         deadline_time = baseline_time + timedelta(seconds=threshold_seconds)
+        current_color = candle_color(current) if current and not current.closed else None
+        entry_candle = current if current_color == "GREEN" else last if last_color == "GREEN" else None
+        entry_timestamp = int(entry_candle.timestamp) if entry_candle else None
+        is_candidate = elapsed_seconds >= threshold_seconds
+        can_signal = (
+            is_candidate
+            and entry_candle is not None
+            and state.get("last_signal_timestamp") != entry_timestamp
+        )
 
         state.update(
             {
                 "watching": True,
-                "alert": False,
+                "alert": is_candidate,
                 "trend": "ALTA" if last_color == "GREEN" else "BAIXA",
                 "target_color": last_color,
+                "signal_color": "GREEN" if is_candidate else "-",
+                "signal_direction": "CALL" if is_candidate else "-",
                 "elapsed_seconds": elapsed_seconds,
                 "first_candle_time": baseline_time.strftime("%H:%M:%S"),
                 "deadline_time": deadline_time.strftime("%H:%M:%S"),
                 "last_pair_timestamp": baseline_timestamp,
-                "status": "Estrategia 02: aguardando 2 candles seguidos da mesma cor",
+                "status": (
+                    f"Estrategia 02: candidato ha {self._format_seconds(elapsed_seconds)} sem 2 iguais; aguardando verde"
+                    if is_candidate and not can_signal
+                    else "Estrategia 02: candidato atrasado; entrada verde"
+                    if can_signal
+                    else "Estrategia 02: aguardando completar 13 minutos sem 2 candles iguais"
+                ),
                 "last_colors": self._last_pair_watch_colors(closed),
             }
         )
+        if can_signal:
+            state["last_signal_timestamp"] = entry_timestamp
+            state["signal"] = Signal(
+                asset=asset.name,
+                active_id=asset.active_id,
+                payout=asset.payout,
+                pattern=(
+                    f"Estrategia 02: {self.settings.pair_watch_minutes} minutos sem 2 candles iguais; "
+                    f"ativo mais atrasado; entrar verde"
+                ),
+                direction="CALL",
+                sequence_color="GREEN",
+                timestamp=datetime.now(),
+                strategy_window_seconds=60,
+                max_entries=1,
+                enter_on_signal=True,
+            )
         self.pair_watch_states[asset.name] = state
         return state
 
@@ -388,12 +395,28 @@ class RobotEngine:
             asset for asset in self.state.assets if self.pair_watch_states.get(asset.name, {}).get("alert")
         ]
         if alert_assets:
-            self.state.focused_asset = alert_assets[0].name
+            self.state.focused_asset = max(
+                alert_assets,
+                key=lambda asset: (
+                    int(self.pair_watch_states.get(asset.name, {}).get("elapsed_seconds", 0) or 0),
+                    asset.payout,
+                ),
+            ).name
             return
         watching_assets = [
             asset for asset in self.state.assets if self.pair_watch_states.get(asset.name, {}).get("watching")
         ]
-        self.state.focused_asset = watching_assets[0].name if watching_assets else None
+        self.state.focused_asset = (
+            max(
+                watching_assets,
+                key=lambda asset: (
+                    int(self.pair_watch_states.get(asset.name, {}).get("elapsed_seconds", 0) or 0),
+                    asset.payout,
+                ),
+            ).name
+            if watching_assets
+            else None
+        )
 
     def update_focus_asset(self) -> None:
         if self.operation_open:

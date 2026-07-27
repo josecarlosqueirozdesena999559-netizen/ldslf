@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import threading
 import time
@@ -51,8 +51,7 @@ def today_key() -> str:
 
 
 STRATEGY_OPTIONS = (
-    ("estrategia 01", "Estrategia 01"),
-    ("estrategia 02", "Estrategia 02 - Pares 13min"),
+    ("estrategia 02", "Estrategia 02 - 13min sem pares"),
 )
 STRATEGY_KEYS = {key for key, _label in STRATEGY_OPTIONS}
 
@@ -207,8 +206,8 @@ class WebBot:
         self.starting = False
         self.auto_trade = True
         self.manual_paused = False
-        self.active_strategy = "Estrategia 01"
-        self.next_strategy = "Candle vermelho abaixo da MA21 real ate 33s; venda PUT com G1"
+        self.active_strategy = "Estrategia 02"
+        self.next_strategy = "13 minutos sem 2 velas iguais; entrar somente em verde"
         self.schedule_enabled = False
         self.schedule_start = ""
         self.schedule_stop = ""
@@ -282,12 +281,12 @@ class WebBot:
         try:
             return result_queue.get(timeout=LOGIN_TIMEOUT_SECONDS)
         except queue.Empty:
-            return False, "Tempo limite ao conectar na BullEx. Verifique senha, bloqueio por IP/VPS ou sessÃ£o aberta em outro lugar."
+            return False, "Tempo limite ao conectar na BullEx. Verifique senha, bloqueio por IP/VPS ou sessÃƒÂ£o aberta em outro lugar."
 
     def start(self, auto_trade: bool = True, reset_stats: bool = True) -> tuple[bool, str | None]:
         with self.lock:
             if not self.client or not self.connected:
-                return False, "FaÃ§a login primeiro."
+                return False, "FaÃƒÂ§a login primeiro."
             if auto_trade and not self.settings_saved:
                 self.status = "Salve as configuracoes antes de iniciar"
                 return False, "Salve as configuracoes antes de iniciar."
@@ -301,8 +300,8 @@ class WebBot:
             self.starting = True
             self.manual_paused = False
             self.auto_trade = auto_trade
-            self.active_strategy = "Estrategia 01"
-            self.next_strategy = "Candle vermelho abaixo da MA21 real ate 33s; venda PUT com G1"
+            self.active_strategy = "Estrategia 02"
+            self.next_strategy = "13 minutos sem 2 velas iguais; entrar somente em verde"
             self.status = "Carregando ativos"
 
         try:
@@ -310,8 +309,8 @@ class WebBot:
             if not assets:
                 with self.lock:
                     self.starting = False
-                    self.status = "Nenhum ativo aberto com payout mÃ­nimo"
-                return False, "Nenhum ativo aberto com payout mÃ­nimo."
+                    self.status = "Nenhum ativo aberto com payout mÃƒÂ­nimo"
+                return False, "Nenhum ativo aberto com payout mÃƒÂ­nimo."
             for asset in assets:
                 self.client.start_candles_stream(asset.name, self.settings.timeframe, CANDLE_LOOKBACK)
             with self.lock:
@@ -405,9 +404,9 @@ class WebBot:
                     return
 
             if self.auto_trade and not self.operation_open:
-                signal = self.update_market_and_find_signal()
-                if not signal:
-                    signal = self.update_pair_watch_and_find_signal()
+                signal = self.update_pair_watch_and_find_signal()
+                if not signal and any(key != "estrategia 02" for key in self.settings.enabled_strategies):
+                    signal = self.update_market_and_find_signal()
             elif self.operation_open:
                 self.update_candles()
                 self.update_focus_asset()
@@ -545,7 +544,12 @@ class WebBot:
 
         state = self.pair_watch_states.get(asset.name, {})
         if state.get("alert"):
-            return (150, asset.payout, self.asset_recency_score(asset), asset.name)
+            return (
+                150 + int(state.get("elapsed_seconds", 0) or 0),
+                asset.payout,
+                self.asset_recency_score(asset),
+                asset.name,
+            )
         if state.get("watching"):
             remaining = max(0, self.settings.pair_watch_minutes * 60 - int(state.get("elapsed_seconds", 0) or 0))
             return (120 + max(0, 30 - remaining // 60), asset.payout, self.asset_recency_score(asset), asset.name)
@@ -553,6 +557,8 @@ class WebBot:
         signal = generate_signal(asset)
         if signal and self.is_signal_strategy_enabled(signal):
             return (100 + self.strategy_priority(signal), asset.payout, self.asset_recency_score(asset), asset.name)
+        if signal:
+            asset.signal = "-"
 
         text = f"{asset.sequence} {asset.signal}".lower()
         sequence_count = self.visual_sequence_count(asset)
@@ -600,6 +606,7 @@ class WebBot:
                 signal = generate_signal(asset)
                 if signal:
                     if not self.is_signal_strategy_enabled(signal):
+                        asset.signal = "-"
                         continue
                     self.release_inactive_strategy_cooldowns(asset, signal)
                     if self.is_strategy_in_cooldown(asset, signal):
@@ -626,7 +633,7 @@ class WebBot:
             return None
         threshold_seconds = self.settings.pair_watch_minutes * 60
         now = time.time()
-        signal_to_trade: Signal | None = None
+        signals: list[tuple[Signal, int]] = []
         for asset in self.ordered_assets():
             if not asset.open or asset.payout < self.settings.payout_min:
                 self.pair_watch_states[asset.name] = {
@@ -636,11 +643,13 @@ class WebBot:
                 }
                 continue
             state = self.update_pair_watch_asset(asset, now, threshold_seconds)
-            if state.get("signal") and signal_to_trade is None:
-                signal_to_trade = state["signal"]
+            if state.get("signal"):
+                signals.append((state["signal"], int(state.get("elapsed_seconds", 0) or 0)))
                 state["signal"] = None
-                self.strategy_02_next_trade_at = now + threshold_seconds
-                self.focused_asset = signal_to_trade.asset
+        if not signals:
+            return None
+        signal_to_trade, _elapsed = max(signals, key=lambda item: (item[1], item[0].payout))
+        self.focused_asset = signal_to_trade.asset
         return signal_to_trade
 
     def update_pair_watch_asset(self, asset: Asset, now: float, threshold_seconds: int) -> dict:
@@ -663,6 +672,7 @@ class WebBot:
         last = closed[-1]
         last_color = candle_color(last)
         last_timestamp = int(last.timestamp)
+        current = getattr(asset, "current_candle", asset.candles[-1] if asset.candles else None)
 
         latest_pair_timestamp = None
         latest_pair_color = None
@@ -680,39 +690,22 @@ class WebBot:
         previous_pair_timestamp = state.get("last_pair_timestamp")
         if latest_pair_timestamp and latest_pair_timestamp != previous_pair_timestamp:
             pair_time = datetime.fromtimestamp(latest_pair_timestamp, BULLEX_TIMEZONE)
-            pair_baseline_timestamp = int(previous_pair_timestamp or closed[0].timestamp)
-            should_follow_pair = latest_pair_timestamp - pair_baseline_timestamp >= threshold_seconds
-            direction = (
-                "CALL"
-                if latest_pair_color == "GREEN" and should_follow_pair
-                else "PUT"
-                if latest_pair_color == "GREEN"
-                else "PUT"
-                if should_follow_pair
-                else "CALL"
-            )
-            signal_color = latest_pair_color if should_follow_pair else "RED" if latest_pair_color == "GREEN" else "GREEN"
-            waiting_seconds = max(0, int(self.strategy_02_next_trade_at - time.time()))
-            can_trade_strategy_02 = waiting_seconds <= 0
-            signal_mode = "seguir ultimo candle" if should_follow_pair else "cor oposta"
             state = {
                 "watching": False,
                 "respected": True,
-                "alert": can_trade_strategy_02,
-                "trade_sent": can_trade_strategy_02,
+                "alert": False,
+                "trade_sent": False,
                 "trend": "ALTA" if latest_pair_color == "GREEN" else "BAIXA",
                 "target_color": latest_pair_color,
-                "signal_color": signal_color,
-                "signal_direction": direction,
+                "signal_color": "-",
+                "signal_direction": "-",
                 "first_candle_time": pair_time.strftime("%H:%M:%S"),
                 "deadline_time": (pair_time + timedelta(seconds=threshold_seconds)).strftime("%H:%M:%S"),
                 "last_pair_timestamp": latest_pair_timestamp,
                 "elapsed_seconds": 0,
                 "status": (
-                    f"Estrategia 02: 2 {self.pair_color_label(latest_pair_color)} as {pair_time.strftime('%H:%M:%S')}; "
-                    f"sinal {self.pair_color_label(signal_color)} ({signal_mode})"
-                    if can_trade_strategy_02
-                    else f"Estrategia 02 aguardando {self.format_seconds(waiting_seconds)} para nova entrada"
+                    f"Estrategia 02: 2 {self.pair_color_label(latest_pair_color)} as "
+                    f"{pair_time.strftime('%H:%M:%S')}; contador reiniciado"
                 ),
                 "last_colors": window_colors,
                 "equal_pairs_count": equal_pairs_count,
@@ -721,23 +714,6 @@ class WebBot:
             }
             if previous_pair_timestamp:
                 self.pair_watch_respected += 1
-            if can_trade_strategy_02:
-                state["signal"] = Signal(
-                    asset=asset.name,
-                    active_id=asset.active_id,
-                    payout=asset.payout,
-                    pattern=(
-                        f"Estrategia 02: 13 minutos; 2 {self.pair_color_label(latest_pair_color)} "
-                        f"iguais as {pair_time.strftime('%H:%M:%S')}; {signal_mode}; entrar {self.pair_color_label(signal_color)}"
-                    ),
-                    direction=direction,
-                    sequence_color=latest_pair_color,
-                    timestamp=datetime.now(),
-                    strategy_window_seconds=60,
-                    max_entries=1,
-                    enter_on_signal=True,
-                )
-                self.pair_watch_entries += 1
             self.pair_watch_states[asset.name] = state
             return state
 
@@ -745,25 +721,59 @@ class WebBot:
         baseline_time = datetime.fromtimestamp(baseline_timestamp, BULLEX_TIMEZONE)
         elapsed_seconds = max(0, last_timestamp - baseline_timestamp)
         deadline_time = baseline_time + timedelta(seconds=threshold_seconds)
+        current_color = candle_color(current) if current and not current.closed else None
+        entry_candle = current if current_color == "GREEN" else last if last_color == "GREEN" else None
+        entry_timestamp = int(entry_candle.timestamp) if entry_candle else None
+        is_candidate = elapsed_seconds >= threshold_seconds
+        can_signal = (
+            is_candidate
+            and entry_candle is not None
+            and state.get("last_signal_timestamp") != entry_timestamp
+        )
 
         state.update(
             {
                 "watching": True,
-                "alert": False,
+                "alert": is_candidate,
                 "trend": "ALTA" if last_color == "GREEN" else "BAIXA",
                 "target_color": last_color,
-                "signal_color": "-",
-                "signal_direction": "-",
+                "signal_color": "GREEN" if is_candidate else "-",
+                "signal_direction": "CALL" if is_candidate else "-",
                 "elapsed_seconds": elapsed_seconds,
                 "first_candle_time": baseline_time.strftime("%H:%M:%S"),
                 "deadline_time": deadline_time.strftime("%H:%M:%S"),
                 "last_pair_timestamp": baseline_timestamp,
-                "status": "Estrategia 02: aguardando 2 candles seguidos da mesma cor",
+                "status": (
+                    f"Estrategia 02: candidato ha {self.format_seconds(elapsed_seconds)} sem 2 iguais; aguardando verde"
+                    if is_candidate and not can_signal
+                    else "Estrategia 02: candidato atrasado; entrada verde"
+                    if can_signal
+                    else "Estrategia 02: aguardando completar 13 minutos sem 2 candles iguais"
+                ),
                 "last_colors": window_colors,
                 "equal_pairs_count": equal_pairs_count,
                 "last_equal_pair_time": last_equal_pair_time,
             }
         )
+        asset.signal = state["status"]
+        if can_signal:
+            state["last_signal_timestamp"] = entry_timestamp
+            state["signal"] = Signal(
+                asset=asset.name,
+                active_id=asset.active_id,
+                payout=asset.payout,
+                pattern=(
+                    f"Estrategia 02: {self.settings.pair_watch_minutes} minutos sem 2 candles iguais; "
+                    f"ativo mais atrasado; entrar verde"
+                ),
+                direction="CALL",
+                sequence_color="GREEN",
+                timestamp=datetime.now(),
+                strategy_window_seconds=60,
+                max_entries=1,
+                enter_on_signal=True,
+            )
+            self.pair_watch_entries += 1
         self.pair_watch_states[asset.name] = state
         return state
 
@@ -857,11 +867,11 @@ class WebBot:
                     self.last_signal = None
                     self.used_signal_keys.discard(self.signal_key_for_signal(signal))
                 elif self.executor and "stop win" in self.executor.current_trade.lower():
-                    self.stop_reason = "STOP WIN atingido. RobÃ´ parado."
+                    self.stop_reason = "STOP WIN atingido. RobÃƒÂ´ parado."
                     self.status = self.stop_reason
                     self.running = False
                 elif self.executor and "stop loss" in self.executor.current_trade.lower():
-                    self.stop_reason = "STOP LOSS atingido. RobÃ´ parado."
+                    self.stop_reason = "STOP LOSS atingido. RobÃƒÂ´ parado."
                     self.status = self.stop_reason
                     self.running = False
                 else:
@@ -909,7 +919,7 @@ class WebBot:
             self.session_losses += 1
         self.session_profit = round(self.session_profit + profit, 2)
         
-        motivo = pattern or "EstratÃ©gia do RobÃ´"
+        motivo = pattern or "EstratÃƒÂ©gia do RobÃƒÂ´"
             
         self.session_results.insert(
             0,
@@ -929,17 +939,17 @@ class WebBot:
 
     def finish_cycle_after_trade(self) -> None:
         if self.risk.check_stop_win(self.settings):
-            self.stop_reason = "STOP WIN atingido. RobÃ´ parado."
+            self.stop_reason = "STOP WIN atingido. RobÃƒÂ´ parado."
             self.status = self.stop_reason
             self.running = False
             return
         if self.risk.check_stop_loss(self.settings):
-            self.stop_reason = "STOP LOSS atingido. RobÃ´ parado."
+            self.stop_reason = "STOP LOSS atingido. RobÃƒÂ´ parado."
             self.status = self.stop_reason
             self.running = False
             return
-        self.next_strategy = "Candle vermelho abaixo da MA21 real ate 33s; venda PUT com G1"
-        self.active_strategy = "Estrategia 01"
+        self.next_strategy = "13 minutos sem 2 velas iguais; entrar somente em verde"
+        self.active_strategy = "Estrategia 02"
         self.status = "Escaneando ativos em tempo real / aguardando sinal"
 
     def start_scheduler(self) -> None:
@@ -979,7 +989,10 @@ class WebBot:
                 self.settings.stop_loss = max(0.0, float(payload.stop_loss))
             if payload.payout_min is not None:
                 self.settings.payout_min = max(1, min(100, int(payload.payout_min)))
-            self.settings.enabled_strategies = ["estrategia 01", "estrategia 02"]
+            enabled = payload.enabled_strategies if payload.enabled_strategies is not None else ["estrategia 02"]
+            self.settings.enabled_strategies = [key for key in enabled if key in STRATEGY_KEYS]
+            if not self.settings.enabled_strategies:
+                self.settings.enabled_strategies = ["estrategia 02"]
             self.settings.martingale_multiplier = 2.0
             if payload.schedule_enabled is not None:
                 self.schedule_enabled = False
@@ -1018,12 +1031,12 @@ class WebBot:
         self.settings.max_martingale = 1
         self.settings.martingale_enabled = True
         self.settings.pair_watch_minutes = 13
-        enabled = data.get("enabled_strategies", ["estrategia 01", "estrategia 02"])
+        enabled = data.get("enabled_strategies", ["estrategia 02"])
         self.settings.enabled_strategies = [
             key for key in enabled if key in STRATEGY_KEYS
-        ] if isinstance(enabled, list) else ["estrategia 01"]
+        ] if isinstance(enabled, list) else ["estrategia 02"]
         if not self.settings.enabled_strategies:
-            self.settings.enabled_strategies = ["estrategia 01", "estrategia 02"]
+            self.settings.enabled_strategies = ["estrategia 02"]
         self.schedule_enabled = False
         self.schedule_start = str(data.get("schedule_start", self.schedule_start))
         self.schedule_stop = str(data.get("schedule_stop", self.schedule_stop))
@@ -1143,9 +1156,9 @@ class WebBot:
         if not asset:
             return False, "Informe o nome do ativo."
         if not direction:
-            return False, "DireÃ§Ã£o invÃ¡lida. Use COMPRA/CALL ou VENDA/PUT."
+            return False, "DireÃƒÂ§ÃƒÂ£o invÃƒÂ¡lida. Use COMPRA/CALL ou VENDA/PUT."
         if not entry_time:
-            return False, "HorÃ¡rio invÃ¡lido. Use HH:MM ou HH:MM:SS."
+            return False, "HorÃƒÂ¡rio invÃƒÂ¡lido. Use HH:MM ou HH:MM:SS."
 
         entry = {
             "id": uuid.uuid4().hex,
@@ -1226,7 +1239,7 @@ class WebBot:
                     self.save_session_score()
                 entry["status"] = "WIN" if win_trade else trade.result
                 entry["last_executed_date"] = bullex_now().strftime("%Y-%m-%d")
-                entry["message"] = f"Resultado automÃ¡tico: {'WIN' if win_trade else trade.result} lucro {sum(float(item.profit or 0) for item in cycle_trades or [trade]):.2f}"
+                entry["message"] = f"Resultado automÃƒÂ¡tico: {'WIN' if win_trade else trade.result} lucro {sum(float(item.profit or 0) for item in cycle_trades or [trade]):.2f}"
             else:
                 entry["status"] = "FALHOU"
                 entry["message"] = self.executor.current_trade if self.executor else "Falha ao executar"
@@ -1381,7 +1394,7 @@ class WebBot:
         rows.sort(
             key=lambda row: (
                 0 if row["alert"] else 1 if row["watching"] else 2 if row["respected"] else 3,
-                row["remaining_seconds"] if row["watching"] else 999999,
+                -row["elapsed_seconds"] if row["alert"] else row["remaining_seconds"] if row["watching"] else 999999,
                 row["asset"],
             )
         )
@@ -1604,8 +1617,8 @@ class WebBot:
 
         return {
             "asset": None,
-            "title": "Escaneando Estrategia 01",
-            "detail": "Candle vermelho fechado abaixo da media movel real de 21 ate 33s; venda PUT com entrada e G1.",
+            "title": "Escaneando Estrategia 02",
+            "detail": "13 minutos sem verde+verde ou vermelho+vermelho; candidato entra somente em verde.",
         }
 
     def state(self) -> dict:
@@ -1659,8 +1672,8 @@ class WebBot:
             "manual_paused": self.manual_paused,
             "settings_saved": self.settings_saved,
             "account": self.last_account,
-            "strategy": "Estrategia 01",
-            "strategy_detail": "Candle vermelho fechado abaixo da media movel real de 21 ate 33s; venda PUT com entrada e G1 se necessario.",
+            "strategy": "Estrategia 02",
+            "strategy_detail": "13 minutos sem 2 velas iguais; quando fechar ou nascer verde, entrar em verde.",
             "strategy_moment": strategy_moment["title"],
             "strategy_moment_detail": strategy_moment["detail"],
             "target_sequence": self.active_strategy,
@@ -1668,7 +1681,7 @@ class WebBot:
             "asset": focus.name if focus else None,
             "sequence": self.visual_sequence(focus) if focus else "-",
             "signal": signal_payload(self.last_signal) if self.last_signal else None,
-            "trade": self.executor.current_trade if self.executor else "Nenhuma operaÃ§Ã£o",
+            "trade": self.executor.current_trade if self.executor else "Nenhuma operaÃƒÂ§ÃƒÂ£o",
             "last_green_time": self.last_green_time,
             "moving_average": {
                 key: round(value, 6) if isinstance(value, float) else value
@@ -1705,7 +1718,7 @@ class WebBot:
 
     def hourly_sequences(self, requested_asset: str) -> tuple[dict | None, str | None]:
         if not self.client or not self.connected:
-            return None, "FaÃ§a login na BullEx primeiro."
+            return None, "FaÃƒÂ§a login na BullEx primeiro."
         requested_asset = requested_asset.strip().upper()
         if not requested_asset:
             return None, "Informe o nome do ativo."
@@ -1715,7 +1728,7 @@ class WebBot:
             return cached[1], None
 
         if not self.analysis_lock.acquire(blocking=False):
-            return None, "JÃ¡ existe uma anÃ¡lise em andamento. Aguarde alguns segundos."
+            return None, "JÃƒÂ¡ existe uma anÃƒÂ¡lise em andamento. Aguarde alguns segundos."
         try:
             asset = self.client.resolve_active_name(requested_asset)
             endtime = int(time.time())
@@ -1735,13 +1748,13 @@ class WebBot:
             }
             rows = analyze_hourly_sequences(list(unique.values()))
             if not rows:
-                return None, f"Nenhum candle histÃ³rico encontrado para {asset}."
+                return None, f"Nenhum candle histÃƒÂ³rico encontrado para {asset}."
 
             best = max(rows, key=lambda row: row["sequence"])
             result = {
                 "ok": True,
                 "asset": asset,
-                "period": "Ãšltimas 24 horas",
+                "period": "ÃƒÅ¡ltimas 24 horas",
                 "updated_at": bullex_now().strftime("%H:%M:%S"),
                 "total_candles": len(unique),
                 "best": best,
@@ -1751,13 +1764,13 @@ class WebBot:
             self.sequence_cache[requested_asset] = (time.time(), result)
             return result, None
         except Exception as exc:
-            return None, f"NÃ£o foi possÃ­vel consultar {requested_asset}: {exc}"
+            return None, f"NÃƒÂ£o foi possÃƒÂ­vel consultar {requested_asset}: {exc}"
         finally:
             self.analysis_lock.release()
 
     def monitored_hourly_sequences(self, force: bool = False) -> tuple[dict | None, str | None]:
         if not self.client or not self.connected:
-            return None, "FaÃ§a login na BullEx primeiro."
+            return None, "FaÃƒÂ§a login na BullEx primeiro."
 
         monitored = self.assets or [
             Asset(name=name, active_id=0, payout=0, open=True)
@@ -1782,7 +1795,7 @@ class WebBot:
             return cached_result, None
 
         if not self.analysis_lock.acquire(blocking=False):
-            return None, "JÃ¡ existe uma anÃ¡lise em andamento. Aguarde alguns segundos."
+            return None, "JÃƒÂ¡ existe uma anÃƒÂ¡lise em andamento. Aguarde alguns segundos."
         try:
             rows = []
             for asset in monitored:
@@ -1891,7 +1904,7 @@ class WebBot:
             }
             result = {
                 "ok": True,
-                "period": f"{target_time.strftime('%d/%m %H:00')}â€“{target_time.strftime('%H:59')}",
+                "period": f"{target_time.strftime('%d/%m %H:00')}Ã¢â‚¬â€œ{target_time.strftime('%H:59')}",
                 "day": target_time.strftime("%d/%m/%Y"),
                 "updated_at": bullex_now().strftime("%H:%M:%S"),
                 "next_update": (target_time + timedelta(hours=1)).strftime("%H:00"),
@@ -2328,8 +2341,8 @@ HTML = r"""
         <option value="DEMO">DEMO</option>
         <option value="REAL">REAL</option>
       </select>
-      <label>ConfirmaÃ§Ã£o REAL</label>
-      <input id="realConfirmation" placeholder="Digite CONFIRMO REAL para liberar operaÃ§Ãµes reais" />
+      <label>ConfirmaÃƒÂ§ÃƒÂ£o REAL</label>
+      <input id="realConfirmation" placeholder="Digite CONFIRMO REAL para liberar operaÃƒÂ§ÃƒÂµes reais" />
       <p id="loginMsg" class="yellow"></p>
       <button onclick="login()">Entrar</button>
     </section>
@@ -2344,7 +2357,7 @@ HTML = r"""
         <button class="secondary" onclick="monitorOnly()">Somente monitorar</button>
         <button class="secondary" onclick="showResults()">Resultados</button>
         <button class="danger" onclick="logout()">Deslogar</button>
-        <button class="danger" onclick="stopBot()">Parar robÃ´</button>
+        <button class="danger" onclick="stopBot()">Parar robÃƒÂ´</button>
       </div>
     </section>
 
@@ -2361,36 +2374,36 @@ HTML = r"""
 
     <section id="monitor" class="hidden">
       <div class="topline">
-        <h2>AnÃ¡lise em tempo real</h2>
+        <h2>AnÃƒÂ¡lise em tempo real</h2>
         <p id="status" class="status">Aguardando...</p>
       </div>
       <div id="pausePanel" class="panel pause hidden"></div>
       <div id="analysisPanel" class="grid">
         <div class="panel">
           <h2 id="asset">Aguardando ativo</h2>
-          <p id="sequence" class="status">EstratÃ©gia do momento: EstratÃ©gia 01</p>
+          <p id="sequence" class="status">EstratÃƒÂ©gia do momento: EstratÃƒÂ©gia 01</p>
           <p id="signal" class="status">Sinal: aguardando</p>
           <div id="liveColor" class="badge doji">DOJI</div>
           <div id="price" class="price">-</div>
           <p id="ohlc" class="status"></p>
         </div>
         <div class="panel">
-          <h2>Ãšltimas velas</h2>
+          <h2>ÃƒÅ¡ltimas velas</h2>
           <table>
-            <thead><tr><th>Hora</th><th>Cor</th><th>Status</th><th>PreÃ§o</th><th>Mov.</th></tr></thead>
+            <thead><tr><th>Hora</th><th>Cor</th><th>Status</th><th>PreÃƒÂ§o</th><th>Mov.</th></tr></thead>
             <tbody id="candles"></tbody>
           </table>
         </div>
       </div>
       <div class="panel" style="margin-top:14px;">
-        <h2>OperaÃ§Ã£o</h2>
-        <p id="trade">Nenhuma operaÃ§Ã£o</p>
-        <p>Ãšltimo GREEN: <strong id="lastGreen" class="green">-</strong></p>
+        <h2>OperaÃƒÂ§ÃƒÂ£o</h2>
+        <p id="trade">Nenhuma operaÃƒÂ§ÃƒÂ£o</p>
+        <p>ÃƒÅ¡ltimo GREEN: <strong id="lastGreen" class="green">-</strong></p>
       </div>
       <div class="panel" style="margin-top:14px;">
         <h2>Ativos monitorados</h2>
         <table>
-          <thead><tr><th>Ativo</th><th>Payout</th><th>Cor</th><th>SequÃªncia</th><th>PadrÃ£o</th></tr></thead>
+          <thead><tr><th>Ativo</th><th>Payout</th><th>Cor</th><th>SequÃƒÂªncia</th><th>PadrÃƒÂ£o</th></tr></thead>
           <tbody id="monitoredAssets"></tbody>
         </table>
       </div>
@@ -2503,20 +2516,20 @@ HTML = r"""
       $("greens").textContent = data.connected ? data.greens : "-";
       $("losses").textContent = data.connected ? data.losses : "-";
       $("profit").textContent = data.connected ? Number(data.profit || 0).toFixed(2) : "-";
-      $("trade").textContent = data.trade || "Nenhuma operaÃ§Ã£o";
+      $("trade").textContent = data.trade || "Nenhuma operaÃƒÂ§ÃƒÂ£o";
       $("lastGreen").textContent = data.last_green_time || "-";
 
       if (data.paused) {
         $("pausePanel").classList.remove("hidden");
         $("analysisPanel").classList.add("hidden");
-        $("pausePanel").innerHTML = `<h2>${data.status}</h2><p>Ãšltimo GREEN: <b class="green">${data.last_green_time}</b></p><p>Saldo: <b>${$("balance").textContent}</b></p>`;
+        $("pausePanel").innerHTML = `<h2>${data.status}</h2><p>ÃƒÅ¡ltimo GREEN: <b class="green">${data.last_green_time}</b></p><p>Saldo: <b>${$("balance").textContent}</b></p>`;
         return;
       }
 
       $("pausePanel").classList.add("hidden");
       $("analysisPanel").classList.remove("hidden");
       $("asset").textContent = data.asset || "Aguardando ativo";
-      $("sequence").textContent = `EstratÃ©gia do momento: ${data.strategy || "Estrategia 01"} - E04 termina vermelho CALL, E05 termina verde PUT, estrategia 01/03, MA21 ou pares 13min`;
+      $("sequence").textContent = `Estrategia do momento: ${data.strategy || "Estrategia 02"} - 13 minutos sem 2 velas iguais; entrada somente em verde`;
       $("signal").textContent = data.signal ? `Sinal: ${data.signal.direction} (${data.signal.pattern})` : "Sinal: aguardando estrategia";
       const last = data.candles[data.candles.length - 1];
       if (last) {
@@ -2525,7 +2538,7 @@ HTML = r"""
         $("liveColor").textContent = last.color === "GREEN" ? "VERDE" : last.color === "RED" ? "VERMELHA" : "DOJI";
         $("price").textContent = Number(last.price).toFixed(6);
         $("price").className = `price ${cls === "red" ? "red" : cls === "green" ? "green" : ""}`;
-        $("ohlc").textContent = `Abertura: ${last.open}  MÃ¡xima: ${last.high}  MÃ­nima: ${last.low}  Tick: ${last.tick}s`;
+        $("ohlc").textContent = `Abertura: ${last.open}  MÃƒÂ¡xima: ${last.high}  MÃƒÂ­nima: ${last.low}  Tick: ${last.tick}s`;
       }
       $("candles").innerHTML = data.candles.map(c => {
         const cls = c.color === "GREEN" ? "green" : c.color === "RED" ? "red" : "doji";
@@ -2542,4 +2555,5 @@ HTML = r"""
 </body>
 </html>
 """
+
 

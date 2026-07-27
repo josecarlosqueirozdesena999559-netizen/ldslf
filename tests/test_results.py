@@ -8,6 +8,7 @@ from models.candle import Candle
 from models.trade import TradeResult
 from robot.executor import TradeExecutor
 from robot.engine import RobotEngine
+from robot.strategy import candle_color
 from web_main import WebBot, api_history_stats, normalize_history_trade, strategy_name_from_pattern
 
 
@@ -141,10 +142,10 @@ class ResultAccountingTests(unittest.TestCase):
         self.assertEqual(last_time, "21:04:00")
         self.assertEqual(colors, "GREEN GREEN RED RED")
 
-    def test_strategy_02_enters_opposite_color_on_equal_pair(self) -> None:
+    def test_strategy_02_enters_green_after_13_minutes_without_equal_pair(self) -> None:
         bot = object.__new__(WebBot)
         bot.settings = BotSettings(pair_watch_minutes=13)
-        bot.pair_watch_states = {}
+        bot.pair_watch_states = {"EURUSD": {"last_pair_timestamp": 60}}
         bot.pair_watch_respected = 0
         bot.pair_watch_entries = 0
         bot.strategy_02_next_trade_at = 0.0
@@ -157,26 +158,38 @@ class ResultAccountingTests(unittest.TestCase):
                 "payout": 90,
                 "candles": [
                     Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=60, closed=True),
-                    Candle(open=1.1, close=1.2, high=1.2, low=1.1, timestamp=120, closed=True),
+                    Candle(open=1.1, close=1.0, high=1.1, low=1.0, timestamp=120, closed=True),
+                    Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=180, closed=True),
+                    Candle(open=1.1, close=1.0, high=1.1, low=1.0, timestamp=240, closed=True),
+                    Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=300, closed=True),
+                    Candle(open=1.1, close=1.0, high=1.1, low=1.0, timestamp=360, closed=True),
+                    Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=420, closed=True),
+                    Candle(open=1.1, close=1.0, high=1.1, low=1.0, timestamp=480, closed=True),
+                    Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=540, closed=True),
+                    Candle(open=1.1, close=1.0, high=1.1, low=1.0, timestamp=600, closed=True),
+                    Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=660, closed=True),
+                    Candle(open=1.1, close=1.0, high=1.1, low=1.0, timestamp=720, closed=True),
+                    Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=780, closed=True),
+                    Candle(open=1.1, close=1.0, high=1.1, low=1.0, timestamp=840, closed=True),
+                    Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=900, closed=True),
                 ],
             },
         )()
 
-        with patch("web_main.time.time", return_value=200):
-            state = bot.update_pair_watch_asset(asset, 200, 13 * 60)
+        with patch("web_main.time.time", return_value=920):
+            state = bot.update_pair_watch_asset(asset, 920, 13 * 60)
 
         self.assertTrue(state["alert"])
-        self.assertEqual(state["signal"].direction, "PUT")
-        self.assertEqual(state["signal_color"], "RED")
-        self.assertIn("Estrategia 02", state["signal"].pattern)
+        self.assertEqual(state["signal"].direction, "CALL")
+        self.assertEqual(state["signal_color"], "GREEN")
+        self.assertIn("sem 2 candles iguais", state["signal"].pattern)
 
-    def test_strategy_02_waits_13_minutes_between_entries(self) -> None:
+    def test_strategy_02_waits_for_green_after_becoming_candidate(self) -> None:
         bot = object.__new__(WebBot)
         bot.settings = BotSettings(pair_watch_minutes=13)
-        bot.pair_watch_states = {}
+        bot.pair_watch_states = {"EURUSD": {"last_pair_timestamp": 60}}
         bot.pair_watch_respected = 0
         bot.pair_watch_entries = 0
-        bot.strategy_02_next_trade_at = 980.0
         asset = type(
             "Asset",
             (),
@@ -185,21 +198,33 @@ class ResultAccountingTests(unittest.TestCase):
                 "active_id": 1,
                 "payout": 90,
                 "candles": [
-                    Candle(open=1.2, close=1.0, high=1.2, low=1.0, timestamp=60, closed=True),
+                    Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=60, closed=True),
                     Candle(open=1.1, close=0.9, high=1.1, low=0.9, timestamp=120, closed=True),
+                    Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=180, closed=True),
+                    Candle(open=1.1, close=1.0, high=1.1, low=1.0, timestamp=240, closed=True),
+                    Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=300, closed=True),
+                    Candle(open=1.1, close=1.0, high=1.1, low=1.0, timestamp=360, closed=True),
+                    Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=420, closed=True),
+                    Candle(open=1.1, close=1.0, high=1.1, low=1.0, timestamp=480, closed=True),
+                    Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=540, closed=True),
+                    Candle(open=1.1, close=1.0, high=1.1, low=1.0, timestamp=600, closed=True),
+                    Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=660, closed=True),
+                    Candle(open=1.1, close=1.0, high=1.1, low=1.0, timestamp=720, closed=True),
+                    Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=780, closed=True),
+                    Candle(open=1.1, close=1.0, high=1.1, low=1.0, timestamp=840, closed=True),
                 ],
             },
         )()
 
-        with patch("web_main.time.time", return_value=300):
-            state = bot.update_pair_watch_asset(asset, 300, 13 * 60)
+        with patch("web_main.time.time", return_value=860):
+            state = bot.update_pair_watch_asset(asset, 860, 13 * 60)
 
-        self.assertFalse(state["alert"])
+        self.assertTrue(state["alert"])
         self.assertNotIn("signal", state)
-        self.assertEqual(state["signal_color"], "GREEN")
-        self.assertIn("aguardando", state["status"])
+        self.assertEqual(state["signal_direction"], "CALL")
+        self.assertIn("aguardando verde", state["status"])
 
-    def test_strategy_02_follows_pair_after_13_minutes_without_pair(self) -> None:
+    def test_strategy_02_resets_counter_when_equal_pair_appears(self) -> None:
         bot = object.__new__(WebBot)
         bot.settings = BotSettings(pair_watch_minutes=13)
         bot.pair_watch_states = {"EURUSD": {"last_pair_timestamp": 60}}
@@ -224,10 +249,63 @@ class ResultAccountingTests(unittest.TestCase):
         with patch("web_main.time.time", return_value=920):
             state = bot.update_pair_watch_asset(asset, 920, 13 * 60)
 
-        self.assertTrue(state["alert"])
-        self.assertEqual(state["signal"].direction, "PUT")
-        self.assertEqual(state["signal_color"], "RED")
-        self.assertIn("seguir ultimo candle", state["signal"].pattern)
+        self.assertFalse(state["alert"])
+        self.assertNotIn("signal", state)
+        self.assertTrue(state["respected"])
+        self.assertIn("contador reiniciado", state["status"])
+
+    def test_strategy_02_prioritizes_most_delayed_candidate(self) -> None:
+        bot = object.__new__(WebBot)
+        bot.settings = BotSettings(pair_watch_minutes=13, payout_min=80, enabled_strategies=["estrategia 02"])
+        bot.pair_watch_states = {
+            "EURUSD": {"last_pair_timestamp": 60},
+            "GBPUSD": {"last_pair_timestamp": 240},
+        }
+        bot.pair_watch_entries = 0
+        bot.focused_asset = None
+
+        def alternating_asset(name: str, baseline: int, last_timestamp: int) -> object:
+            candles = []
+            color_green = True
+            for timestamp in range(baseline, last_timestamp + 60, 60):
+                candles.append(
+                    Candle(
+                        open=1.0,
+                        close=1.1 if color_green else 0.9,
+                        high=1.1,
+                        low=0.9,
+                        timestamp=timestamp,
+                        closed=True,
+                    )
+                )
+                color_green = not color_green
+            if candle_color(candles[-1]) != "GREEN":
+                candles[-1] = Candle(open=1.0, close=1.1, high=1.1, low=0.9, timestamp=last_timestamp, closed=True)
+            return type(
+                "Asset",
+                (),
+                {
+                    "name": name,
+                    "active_id": 1,
+                    "payout": 90,
+                    "open": True,
+                    "candles": candles,
+                    "current_candle": candles[-1],
+                },
+            )()
+
+        bot.assets = [
+            alternating_asset("EURUSD", 60, 1020),
+            alternating_asset("GBPUSD", 240, 1080),
+        ]
+        bot.ordered_assets = lambda: bot.assets
+
+        with patch("web_main.time.time", return_value=1100):
+            signal = bot.update_pair_watch_and_find_signal()
+
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal.asset, "EURUSD")
+        self.assertEqual(bot.focused_asset, "EURUSD")
 
     def test_strategy_cooldown_blocks_same_family_until_signal_changes(self) -> None:
         engine = object.__new__(RobotEngine)

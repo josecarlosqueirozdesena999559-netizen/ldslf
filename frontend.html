@@ -1910,7 +1910,7 @@
                   </div>
                 </div>
                 <div id="entryGaleWarn" class="entry-gale-warning hidden">
-                  <i class="fa-solid fa-triangle-exclamation"></i> Aguardando resultado G1...
+                  <i class="fa-solid fa-triangle-exclamation"></i> Aguardando resultado...
                 </div>
                 
                 <!-- Animated Order / Executing status loader -->
@@ -3582,7 +3582,7 @@
           }
           
           // G1 Martingale notice
-          if (tradeMsg.includes("G1")) {
+          if (tradeMsg.includes("G1") && !String(data.signal?.pattern || data.strategy_moment || "").toUpperCase().includes("ESTRATEGIA 02")) {
             $("entryGaleWarn").classList.remove("hidden");
           } else {
             $("entryGaleWarn").classList.add("hidden");
@@ -3691,6 +3691,7 @@
       if (upper.includes("VENDA NO 33") || upper.includes("VENDIDO NO SEGUNDO 33")) return "PUT MA21 33s";
       if (upper.includes("MA21") && upper.includes("CALL")) return "CALL MA21 33s";
       if (upper.includes("MA21") && upper.includes("PUT")) return "PUT MA21 33s";
+      if (upper.includes("ESTRATEGIA 02") || upper.includes("ESTRATÉGIA 02") || upper.includes("SEM 2 CANDLES IGUAIS")) return "Estrategia 02";
       if (upper.includes("ESTRATEGIA 01") || upper.includes("ESTRATÉGIA 01")) return "Estrategia 01";
       if (upper.includes("ESTRATEGIA 04") || upper.includes("ESTRATÉGIA 04")) return "Estrategia 04";
       if (upper.includes("ESTRATEGIA 05") || upper.includes("ESTRATÉGIA 05")) return "Estrategia 05";
