@@ -680,10 +680,21 @@ class WebBot:
         previous_pair_timestamp = state.get("last_pair_timestamp")
         if latest_pair_timestamp and latest_pair_timestamp != previous_pair_timestamp:
             pair_time = datetime.fromtimestamp(latest_pair_timestamp, BULLEX_TIMEZONE)
-            direction = "PUT" if latest_pair_color == "GREEN" else "CALL"
-            signal_color = "RED" if latest_pair_color == "GREEN" else "GREEN"
+            pair_baseline_timestamp = int(previous_pair_timestamp or closed[0].timestamp)
+            should_follow_pair = latest_pair_timestamp - pair_baseline_timestamp >= threshold_seconds
+            direction = (
+                "CALL"
+                if latest_pair_color == "GREEN" and should_follow_pair
+                else "PUT"
+                if latest_pair_color == "GREEN"
+                else "PUT"
+                if should_follow_pair
+                else "CALL"
+            )
+            signal_color = latest_pair_color if should_follow_pair else "RED" if latest_pair_color == "GREEN" else "GREEN"
             waiting_seconds = max(0, int(self.strategy_02_next_trade_at - time.time()))
             can_trade_strategy_02 = waiting_seconds <= 0
+            signal_mode = "seguir ultimo candle" if should_follow_pair else "cor oposta"
             state = {
                 "watching": False,
                 "respected": True,
@@ -699,7 +710,7 @@ class WebBot:
                 "elapsed_seconds": 0,
                 "status": (
                     f"Estrategia 02: 2 {self.pair_color_label(latest_pair_color)} as {pair_time.strftime('%H:%M:%S')}; "
-                    f"sinal {self.pair_color_label(signal_color)}"
+                    f"sinal {self.pair_color_label(signal_color)} ({signal_mode})"
                     if can_trade_strategy_02
                     else f"Estrategia 02 aguardando {self.format_seconds(waiting_seconds)} para nova entrada"
                 ),
@@ -717,7 +728,7 @@ class WebBot:
                     payout=asset.payout,
                     pattern=(
                         f"Estrategia 02: 13 minutos; 2 {self.pair_color_label(latest_pair_color)} "
-                        f"iguais as {pair_time.strftime('%H:%M:%S')}; entrar {self.pair_color_label(signal_color)}"
+                        f"iguais as {pair_time.strftime('%H:%M:%S')}; {signal_mode}; entrar {self.pair_color_label(signal_color)}"
                     ),
                     direction=direction,
                     sequence_color=latest_pair_color,

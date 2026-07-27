@@ -199,6 +199,36 @@ class ResultAccountingTests(unittest.TestCase):
         self.assertEqual(state["signal_color"], "GREEN")
         self.assertIn("aguardando", state["status"])
 
+    def test_strategy_02_follows_pair_after_13_minutes_without_pair(self) -> None:
+        bot = object.__new__(WebBot)
+        bot.settings = BotSettings(pair_watch_minutes=13)
+        bot.pair_watch_states = {"EURUSD": {"last_pair_timestamp": 60}}
+        bot.pair_watch_respected = 0
+        bot.pair_watch_entries = 0
+        bot.strategy_02_next_trade_at = 0.0
+        asset = type(
+            "Asset",
+            (),
+            {
+                "name": "EURUSD",
+                "active_id": 1,
+                "payout": 90,
+                "candles": [
+                    Candle(open=1.0, close=1.1, high=1.1, low=1.0, timestamp=60, closed=True),
+                    Candle(open=1.0, close=0.9, high=1.0, low=0.9, timestamp=840, closed=True),
+                    Candle(open=0.9, close=0.8, high=0.9, low=0.8, timestamp=900, closed=True),
+                ],
+            },
+        )()
+
+        with patch("web_main.time.time", return_value=920):
+            state = bot.update_pair_watch_asset(asset, 920, 13 * 60)
+
+        self.assertTrue(state["alert"])
+        self.assertEqual(state["signal"].direction, "PUT")
+        self.assertEqual(state["signal_color"], "RED")
+        self.assertIn("seguir ultimo candle", state["signal"].pattern)
+
     def test_strategy_cooldown_blocks_same_family_until_signal_changes(self) -> None:
         engine = object.__new__(RobotEngine)
         engine.asset_strategy_cooldowns = {}
