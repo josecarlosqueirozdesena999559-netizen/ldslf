@@ -51,9 +51,14 @@ def today_key() -> str:
 
 
 STRATEGY_OPTIONS = (
+    ("estrategia 01", "Estrategia 01 - MA21 / 8 candles"),
     ("estrategia 02", "Estrategia 02 - 13min sem pares"),
+    ("estrategia 03", "Estrategia 03 - reversao apos 8 verdes"),
+    ("estrategia 04", "Estrategia 04 - verde/vermelho/verde/vermelho"),
+    ("estrategia 05", "Estrategia 05 - vermelho/verde/vermelho/verde"),
 )
 STRATEGY_KEYS = {key for key, _label in STRATEGY_OPTIONS}
+DEFAULT_ENABLED_STRATEGIES = [key for key, _label in STRATEGY_OPTIONS]
 
 
 class LoginPayload(BaseModel):
@@ -305,7 +310,7 @@ class WebBot:
             self.status = "Carregando ativos"
 
         try:
-            assets = self.client.get_priority_assets_fast(self.settings.payout_min, self.settings.asset_limit)
+            assets = self.client.get_assets(self.settings.payout_min, self.settings.asset_limit)
             if not assets:
                 with self.lock:
                     self.starting = False
@@ -404,9 +409,7 @@ class WebBot:
                     return
 
             if self.auto_trade and not self.operation_open:
-                signal = self.update_pair_watch_and_find_signal()
-                if not signal and any(key != "estrategia 02" for key in self.settings.enabled_strategies):
-                    signal = self.update_market_and_find_signal()
+                signal = self.update_auto_strategies_and_find_signal()
             elif self.operation_open:
                 self.update_candles()
                 self.update_focus_asset()
@@ -477,6 +480,58 @@ class WebBot:
             self.update_focus_asset()
             return None
         signal, _key = max(signals, key=lambda item: (self.strategy_priority(item[0]), item[0].payout))
+        self.focused_asset = signal.asset
+        return signal
+
+    def update_auto_strategies_and_find_signal(self) -> Signal | None:
+        if not self.settings.enabled_strategies:
+            self.status = "Nenhuma estrategia configurada"
+            self.update_focus_asset()
+            return None
+        update_payout = time.time() - self.last_payout_update >= 30
+        if update_payout:
+            self.last_payout_update = time.time()
+        threshold_seconds = self.settings.pair_watch_minutes * 60
+        now = time.time()
+        signals: list[tuple[Signal, tuple]] = []
+        for asset in self.assets:
+            self.update_asset_candles(asset, update_payout)
+            if not asset.open or asset.payout < self.settings.payout_min:
+                asset.signal = "-"
+                if "estrategia 02" in self.settings.enabled_strategies:
+                    self.pair_watch_states[asset.name] = {
+                        "status": "Ativo fechado ou payout baixo",
+                        "alert": False,
+                        "last_colors": "-",
+                    }
+                continue
+
+            if "estrategia 02" in self.settings.enabled_strategies:
+                state = self.update_pair_watch_asset(asset, now, threshold_seconds)
+                if state.get("signal"):
+                    signal = state["signal"]
+                    state["signal"] = None
+                    signals.append((signal, self.signal_rank_key(asset, signal, int(state.get("elapsed_seconds", 0) or 0))))
+
+            market_signal = generate_signal(asset)
+            if not market_signal:
+                self.clear_strategy_cooldown(asset)
+                continue
+            if not self.is_signal_strategy_enabled(market_signal):
+                continue
+            self.release_inactive_strategy_cooldowns(asset, market_signal)
+            if self.is_strategy_in_cooldown(asset, market_signal):
+                continue
+            if self.is_asset_in_signal_cooldown(asset):
+                continue
+            key = self.signal_key(asset, market_signal)
+            if key in self.used_signal_keys:
+                continue
+            signals.append((market_signal, self.signal_rank_key(asset, market_signal)))
+        if not signals:
+            self.update_focus_asset()
+            return None
+        signal, _rank = max(signals, key=lambda item: item[1])
         self.focused_asset = signal.asset
         return signal
 
@@ -989,10 +1044,10 @@ class WebBot:
                 self.settings.stop_loss = max(0.0, float(payload.stop_loss))
             if payload.payout_min is not None:
                 self.settings.payout_min = max(1, min(100, int(payload.payout_min)))
-            enabled = payload.enabled_strategies if payload.enabled_strategies is not None else ["estrategia 02"]
+            enabled = payload.enabled_strategies if payload.enabled_strategies is not None else DEFAULT_ENABLED_STRATEGIES
             self.settings.enabled_strategies = [key for key in enabled if key in STRATEGY_KEYS]
             if not self.settings.enabled_strategies:
-                self.settings.enabled_strategies = ["estrategia 02"]
+                self.settings.enabled_strategies = list(DEFAULT_ENABLED_STRATEGIES)
             self.settings.martingale_multiplier = 2.0
             if payload.schedule_enabled is not None:
                 self.schedule_enabled = False
@@ -1031,12 +1086,12 @@ class WebBot:
         self.settings.max_martingale = 1
         self.settings.martingale_enabled = True
         self.settings.pair_watch_minutes = 13
-        enabled = data.get("enabled_strategies", ["estrategia 02"])
+        enabled = data.get("enabled_strategies", DEFAULT_ENABLED_STRATEGIES)
         self.settings.enabled_strategies = [
             key for key in enabled if key in STRATEGY_KEYS
-        ] if isinstance(enabled, list) else ["estrategia 02"]
+        ] if isinstance(enabled, list) else list(DEFAULT_ENABLED_STRATEGIES)
         if not self.settings.enabled_strategies:
-            self.settings.enabled_strategies = ["estrategia 02"]
+            self.settings.enabled_strategies = list(DEFAULT_ENABLED_STRATEGIES)
         self.schedule_enabled = False
         self.schedule_start = str(data.get("schedule_start", self.schedule_start))
         self.schedule_stop = str(data.get("schedule_stop", self.schedule_stop))
@@ -1557,6 +1612,18 @@ class WebBot:
 
     def is_signal_strategy_enabled(self, signal: Signal) -> bool:
         return self.signal_family(signal) in self.settings.enabled_strategies
+
+    def signal_rank_key(self, asset: Asset, signal: Signal, elapsed_seconds: int = 0) -> tuple:
+        key = self.signal_key(asset, signal)
+        already_used = 1 if key in self.used_signal_keys else 0
+        return (
+            -already_used,
+            self.strategy_priority(signal),
+            elapsed_seconds,
+            signal.payout,
+            self.asset_recency_score(asset),
+            signal.asset,
+        )
 
     @staticmethod
     def format_seconds(seconds: int) -> str:

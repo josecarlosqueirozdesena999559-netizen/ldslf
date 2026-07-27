@@ -96,11 +96,7 @@ class RobotEngine:
                     self.update_candles()
                     signal = self.update_pair_watch_and_find_signal()
                 elif self.auto_trade and not self.operation_open:
-                    signal = None
-                    if "estrategia 02" in self.settings.enabled_strategies:
-                        signal = self.update_pair_watch_and_find_signal()
-                    if not signal and any(key != "estrategia 02" for key in self.settings.enabled_strategies):
-                        signal = self.update_market_and_find_signal()
+                    signal = self.update_auto_strategies_and_find_signal()
                 else:
                     self.update_candles()
                     self.update_focus_asset()
@@ -156,6 +152,54 @@ class RobotEngine:
         if not signals:
             return None
         signal, _key = max(signals, key=lambda item: (self.strategy_priority(item[0]), item[0].payout))
+        self.state.focused_asset = signal.asset
+        self.logger.info("[SIGNAL] %s %s encontrado", signal.asset, signal.direction)
+        return signal
+
+    def update_auto_strategies_and_find_signal(self) -> Signal | None:
+        update_payout = time.time() - self.last_payout_update >= 30
+        if update_payout:
+            self.last_payout_update = time.time()
+        threshold_seconds = self.settings.pair_watch_minutes * 60
+        now = time.time()
+        signals: list[tuple[Signal, tuple]] = []
+        for asset in self.state.assets:
+            self.update_asset_candles(asset, update_payout)
+            if not asset.open or asset.payout < self.settings.payout_min:
+                asset.signal = "-"
+                if "estrategia 02" in self.settings.enabled_strategies:
+                    self.pair_watch_states[asset.name] = {
+                        "status": "Ativo fechado ou payout baixo",
+                        "alert": False,
+                    }
+                continue
+
+            if "estrategia 02" in self.settings.enabled_strategies:
+                state = self.update_pair_watch_asset(asset, now, threshold_seconds)
+                if state.get("signal"):
+                    signal = state["signal"]
+                    state["signal"] = None
+                    signals.append((signal, self.signal_rank_key(asset, signal, int(state.get("elapsed_seconds", 0) or 0))))
+
+            market_signal = generate_signal(asset)
+            if not market_signal:
+                self.clear_strategy_cooldown(asset)
+                continue
+            if self.signal_family(market_signal) not in self.settings.enabled_strategies:
+                continue
+            self.release_inactive_strategy_cooldowns(asset, market_signal)
+            if self.is_strategy_in_cooldown(asset, market_signal):
+                continue
+            if self.is_asset_in_signal_cooldown(asset):
+                continue
+            key = self.signal_key(asset, market_signal)
+            if key in self.used_signal_keys:
+                continue
+            signals.append((market_signal, self.signal_rank_key(asset, market_signal)))
+        if not signals:
+            self.update_focus_asset()
+            return None
+        signal, _rank = max(signals, key=lambda item: item[1])
         self.state.focused_asset = signal.asset
         self.logger.info("[SIGNAL] %s %s encontrado", signal.asset, signal.direction)
         return signal
@@ -610,6 +654,17 @@ class RobotEngine:
         if "velas 3, 4 e 5" in pattern:
             return 70
         return 50
+
+    def signal_rank_key(self, asset, signal: Signal, elapsed_seconds: int = 0) -> tuple:
+        key = self.signal_key(asset, signal)
+        already_used = 1 if key in self.used_signal_keys else 0
+        return (
+            -already_used,
+            self.strategy_priority(signal),
+            elapsed_seconds,
+            signal.payout,
+            signal.asset,
+        )
 
     def update_live_panels(self):
         account = account_snapshot(self.client)
