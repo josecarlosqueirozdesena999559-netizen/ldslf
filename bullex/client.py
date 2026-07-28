@@ -22,16 +22,28 @@ class BullExClient:
         self.candle_history_lock = threading.Lock()
 
     def connect(self, email: str, password: str, account_mode: str) -> tuple[bool, str | None]:
-        api_mode = self._to_api_mode(account_mode)
+        requested_mode = self._normalize_account_mode(account_mode)
+        api_mode = self._to_api_mode(requested_mode)
         self._reset_global_session()
         self.api = Bullex(email, password, active_account_type=api_mode)
         ok, message = self.api.connect()
         if not ok:
             self.connected = False
             return False, self._normalize_login_error(message)
-        self.api.change_balance(api_mode)
+        try:
+            self.api.change_balance(api_mode)
+            detected_mode = self._normalize_account_mode(self.api.get_balance_mode())
+        except Exception as exc:
+            self.connected = False
+            return False, str(exc)
+        if detected_mode != requested_mode:
+            self.connected = False
+            return False, (
+                f"A BullEx nao confirmou a troca para a conta {requested_mode} "
+                f"(modo detectado: {detected_mode or 'desconhecido'})."
+            )
         self.connected = bool(self.api.check_connect())
-        self.account_mode = account_mode
+        self.account_mode = requested_mode
         return self.connected, None
 
     @staticmethod
@@ -98,7 +110,7 @@ class BullExClient:
     def get_balance_mode(self) -> str:
         self._require_api()
         mode = self.api.get_balance_mode()
-        return "DEMO" if mode == "PRACTICE" else str(mode)
+        return self._normalize_account_mode(mode)
 
     def get_currency(self) -> str:
         self._require_api()
@@ -257,7 +269,16 @@ class BullExClient:
 
     @staticmethod
     def _to_api_mode(account_mode: str) -> str:
-        return "PRACTICE" if account_mode.upper() == "DEMO" else "REAL"
+        return "PRACTICE" if BullExClient._normalize_account_mode(account_mode) == "DEMO" else "REAL"
+
+    @staticmethod
+    def _normalize_account_mode(account_mode: Any) -> str:
+        mode = str(account_mode or "").strip().upper()
+        if mode in {"DEMO", "PRACTICE", "4"}:
+            return "DEMO"
+        if mode in {"REAL", "1"}:
+            return "REAL"
+        return mode
 
     def _server_timestamp(self) -> int:
         try:

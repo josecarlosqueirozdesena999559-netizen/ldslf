@@ -469,14 +469,15 @@ class Bullex:
     def get_balance_mode(self):
         # self.api.profile.balance_type=None
         profile = self.get_profile_ansyc()
-        for balance in profile.get("balances"):
-            if balance["id"] == global_value.balance_id:
-                if balance["type"] == 1:
+        for balance in profile.get("balances") or []:
+            if str(balance.get("id")) == str(global_value.balance_id):
+                balance_type = int(balance.get("type"))
+                if balance_type == 1:
                     return "REAL"
-                elif balance["type"] == 4:
+                elif balance_type == 4:
                     return "PRACTICE"
 
-                elif balance["type"] == 2:
+                elif balance_type == 2:
                     return "TOURNAMENT"
 
     def reset_practice_balance(self):
@@ -514,27 +515,34 @@ class Bullex:
         practice_id = None
         tournament_id = None
 
-        for balance in self.get_profile_ansyc()["balances"]:
-            if balance["type"] == 1:
+        for balance in self.get_profile_ansyc().get("balances") or []:
+            balance_type = int(balance.get("type"))
+            if balance_type == 1:
                 real_id = balance["id"]
-            if balance["type"] == 4:
+            if balance_type == 4:
                 practice_id = balance["id"]
 
-            if balance["type"] == 2:
+            if balance_type == 2:
                 tournament_id = balance["id"]
 
         if Balance_MODE == "REAL":
-            set_id(real_id)
+            selected_id = real_id
 
         elif Balance_MODE == "PRACTICE":
-            set_id(practice_id)
+            selected_id = practice_id
 
         elif Balance_MODE == "TOURNAMENT":
-            set_id(tournament_id)
+            selected_id = tournament_id
 
         else:
-            logging.error("ERROR doesn't have this mode")
-            exit(1)
+            raise ValueError("Modo de conta invalido: {}".format(Balance_MODE))
+
+        if selected_id is None:
+            raise RuntimeError(
+                "A conta {} nao esta disponivel neste usuario da BullEx.".format(Balance_MODE)
+            )
+        set_id(selected_id)
+        return True
 
     # ________________________________________________________________________
     # _______________________        CANDLE      _____________________________

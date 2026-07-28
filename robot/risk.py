@@ -31,6 +31,12 @@ class RiskManager:
         balance: float,
         value: float,
     ) -> tuple[bool, str]:
+        account_mode = str(account_mode).strip().upper()
+        detected_mode = str(detected_mode).strip().upper()
+        if account_mode == "PRACTICE":
+            account_mode = "DEMO"
+        if detected_mode == "PRACTICE":
+            detected_mode = "DEMO"
         if account_mode != detected_mode:
             return False, "conta detectada diferente da selecionada"
         if not self.check_real_confirmation(account_mode):
