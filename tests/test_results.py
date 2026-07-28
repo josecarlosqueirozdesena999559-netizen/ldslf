@@ -323,9 +323,7 @@ class ResultAccountingTests(unittest.TestCase):
         self.assertFalse(engine.is_strategy_in_cooldown(asset, signal))
 
     def test_strategy_classifier_uses_real_robot_families(self) -> None:
-        self.assertEqual(strategy_name_from_pattern("Estrategia 04: verde, vermelho, verde e vermelho"), "Estrategia 04")
         self.assertEqual(strategy_name_from_pattern("Estrategia 05: vermelho, verde, vermelho e verde"), "Estrategia 05")
-        self.assertEqual(strategy_name_from_pattern("Estrategia 03: 8 candles verdes seguidos"), "Estrategia 03")
         self.assertEqual(strategy_name_from_pattern("Vermelho sem pavio abaixo da MA21 + velas 5, 6 e 7"), "MA21 Sem Pavio")
         self.assertEqual(strategy_name_from_pattern("Verde rompeu a MA21; comprar no segundo 33"), "CALL MA21 33s")
         self.assertEqual(strategy_name_from_pattern("Vermelho rompeu a MA21; operar vendido no segundo 33"), "PUT MA21 33s")
@@ -339,8 +337,8 @@ class ResultAccountingTests(unittest.TestCase):
 
     def test_history_stats_returns_only_requested_day(self) -> None:
         rows = [
-            {"timestamp": "2026-07-25 12:00:00", "asset": "EURUSD", "direction": "CALL", "result": "WIN", "profit": 5, "pattern": "Estrategia 04"},
-            {"timestamp": "2026-07-26 12:00:00", "asset": "GBPUSD", "direction": "PUT", "result": "LOSS", "profit": -3, "pattern": "Estrategia 05"},
+            {"timestamp": "2026-07-25 12:00:00", "asset": "EURUSD", "direction": "CALL", "result": "WIN", "profit": 5, "pattern": "Estrategia 05"},
+            {"timestamp": "2026-07-26 12:00:00", "asset": "GBPUSD", "direction": "PUT", "result": "LOSS", "profit": -3, "pattern": "Estrategia 01"},
         ]
 
         with patch("web_main.bot.history.all", return_value=rows):

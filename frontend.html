@@ -3693,9 +3693,7 @@
       if (upper.includes("MA21") && upper.includes("PUT")) return "PUT MA21 33s";
       if (upper.includes("ESTRATEGIA 02") || upper.includes("ESTRATÉGIA 02") || upper.includes("SEM 2 CANDLES IGUAIS")) return "Estrategia 02";
       if (upper.includes("ESTRATEGIA 01") || upper.includes("ESTRATÉGIA 01")) return "Estrategia 01";
-      if (upper.includes("ESTRATEGIA 04") || upper.includes("ESTRATÉGIA 04")) return "Estrategia 04";
       if (upper.includes("ESTRATEGIA 05") || upper.includes("ESTRATÉGIA 05")) return "Estrategia 05";
-      if (upper.includes("ESTRATEGIA 03") || upper.includes("ESTRATÉGIA 03")) return "Estrategia 03";
       if (upper.includes("REVERS")) return "Reversao";
       if (upper.includes("CONTINUA")) return "Continuacao";
       return raw.length > 28 ? `${raw.slice(0, 25)}...` : raw;

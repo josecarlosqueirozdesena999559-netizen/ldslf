@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import threading
 import time
@@ -53,8 +53,6 @@ def today_key() -> str:
 STRATEGY_OPTIONS = (
     ("estrategia 01", "Estrategia 01 - MA21 / 8 candles"),
     ("estrategia 02", "Estrategia 02 - 13min sem pares"),
-    ("estrategia 03", "Estrategia 03 - reversao apos 8 verdes"),
-    ("estrategia 04", "Estrategia 04 - verde/vermelho/verde/vermelho"),
     ("estrategia 05", "Estrategia 05 - vermelho/verde/vermelho/verde"),
 )
 STRATEGY_KEYS = {key for key, _label in STRATEGY_OPTIONS}
@@ -639,9 +637,7 @@ class WebBot:
             return 85
         if "velas 5, 6 e 7" in pattern:
             return 80
-        if "estrategia 03" in pattern:
-            return 75
-        if "estrategia 04" in pattern or "estrategia 05" in pattern:
+        if "estrategia 05" in pattern:
             return 82
         if "estrategia 01" in pattern:
             return 88
@@ -1590,14 +1586,6 @@ class WebBot:
             return "estrategia 01"
         if "estrategia 02" in pattern:
             return "estrategia 02"
-        if "estrategia 03" in pattern:
-            return "estrategia 03"
-        if "estrategia 04" in pattern:
-            return "estrategia 04"
-        if "estrategia 05" in pattern:
-            return "estrategia 05"
-        if "velas 5, 6 e 7" in pattern:
-            return "ma21 wickless"
         if "comprar no segundo 33" in pattern:
             return "ma21 call 33"
         if "operar vendido no segundo 33" in pattern:
@@ -2128,10 +2116,6 @@ def strategy_name_from_pattern(pattern: str | None) -> str:
         return "Sem estrategia registrada"
     if "entrada manual" in lower:
         return "Entrada Manual"
-    if "estrategia 03" in lower:
-        return "Estrategia 03"
-    if "estrategia 04" in lower:
-        return "Estrategia 04"
     if "estrategia 05" in lower:
         return "Estrategia 05"
     if "estrategia 02" in lower:

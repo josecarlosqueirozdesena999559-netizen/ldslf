@@ -19,8 +19,6 @@ STRATEGY_01_MIN_PULLBACK_PRICE_RATIO = 0.00005
 STRATEGY_PATTERN_MARKERS = (
     "estrategia 01",
     "estrategia 02",
-    "estrategia 03",
-    "estrategia 04",
     "estrategia 05",
 )
 
@@ -591,8 +589,6 @@ def collect_strategy_signals(asset: Asset) -> list[Signal]:
         (detect_strategy_01_red_below_ma21_before_33, REVERSAL_WINDOW_SECONDS, 2, True),
         (detect_eight_candle_reversal, REVERSAL_WINDOW_SECONDS, 3, False),
         (detect_eight_candle_sequence, CONTINUATION_WINDOW_SECONDS, 3, False),
-        (detect_strategy_03_green_reversal_call, REVERSAL_WINDOW_SECONDS, 2, False),
-        (detect_strategy_04_green_red_green_red, REVERSAL_WINDOW_SECONDS, 1, False),
         (detect_strategy_05_red_green_red_green, REVERSAL_WINDOW_SECONDS, 1, False),
     )
     for detector, window_seconds, max_entries, enter_on_signal in detections:
