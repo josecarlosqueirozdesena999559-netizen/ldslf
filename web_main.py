@@ -51,13 +51,15 @@ def today_key() -> str:
     return bullex_now().strftime("%Y-%m-%d")
 
 
-STRATEGY_OPTIONS = (
-    ("estrategia 01", "Estrategia 01 - vermelho abaixo MA21 / 33s"),
-    ("estrategia 02", "Estrategia 02 - 13min sem pares"),
-    ("estrategia 05", "Estrategia 05 - verde acima / MA21 / 33s"),
+STRATEGY_OPTIONS: tuple[tuple[str, str, str], ...] = (
+    (
+        "estrategia 01",
+        "Estratégia 01",
+        "Após 33s e acima da MA21: vende acima do fechamento anterior e compra abaixo dele.",
+    ),
 )
-STRATEGY_KEYS = {key for key, _label in STRATEGY_OPTIONS}
-DEFAULT_ENABLED_STRATEGIES = [key for key, _label in STRATEGY_OPTIONS]
+STRATEGY_KEYS = {key for key, _name, _movement in STRATEGY_OPTIONS}
+DEFAULT_ENABLED_STRATEGIES = ["estrategia 01"]
 
 
 class LoginPayload(BaseModel):
@@ -73,6 +75,7 @@ class SettingsPayload(BaseModel):
     stop_loss: float | None = None
     payout_min: int | None = None
     martingale_multiplier: float | None = None
+    max_martingale: int | None = None
     schedule_enabled: bool | None = None
     schedule_start: str | None = None
     schedule_stop: str | None = None
@@ -210,8 +213,9 @@ class WebBot:
         self.starting = False
         self.auto_trade = True
         self.manual_paused = False
-        self.active_strategy = "Estrategia 02"
-        self.next_strategy = "13 minutos sem 2 velas iguais; entrar somente em verde"
+        self.active_strategy = ""
+        self.next_strategy = ""
+        self.startup_message = ""
         self.schedule_enabled = False
         self.schedule_start = ""
         self.schedule_stop = ""
@@ -304,12 +308,14 @@ class WebBot:
             self.starting = True
             self.manual_paused = False
             self.auto_trade = auto_trade
-            self.active_strategy = "Estrategia 02"
-            self.next_strategy = "13 minutos sem 2 velas iguais; entrar somente em verde"
-            self.status = "Carregando ativos"
+            self.stop_reason = ""
+            self.active_strategy = ""
+            self.next_strategy = ""
+            self.startup_message = "Carregando estrategias..."
+            self.status = self.startup_message
 
         try:
-            assets = self.client.get_assets(self.settings.payout_min, self.settings.asset_limit)
+            assets = self.client.get_assets(self.settings.payout_min, limit=10_000)
             if not assets:
                 with self.lock:
                     self.starting = False
@@ -319,7 +325,7 @@ class WebBot:
                 self.client.start_candles_stream(asset.name, self.settings.timeframe, CANDLE_LOOKBACK)
             with self.lock:
                 self.assets = assets
-                self.status = "Carregando candles para estrategias"
+                self.status = "Carregando estrategias..."
             self.load_initial_candles()
         except Exception as exc:
             with self.lock:
@@ -331,7 +337,13 @@ class WebBot:
         with self.lock:
             self.running = True
             self.starting = False
-            self.status = "Escaneando ativos em tempo real / aguardando sinal"
+            loaded_labels = [
+                name for key, name, _movement in STRATEGY_OPTIONS
+                if key in self.settings.enabled_strategies
+            ]
+            loaded_text = ", ".join(loaded_labels) if loaded_labels else "nenhuma"
+            self.startup_message = f"Estrategias carregadas: {loaded_text}."
+            self.status = "Escaneando ativos em tempo real / aguardando sinal" if loaded_labels else "Nenhuma estrategia carregada"
         self.thread = threading.Thread(target=self.loop, daemon=True)
         self.thread.start()
         return True, None
@@ -342,6 +354,7 @@ class WebBot:
             self.starting = False
             self.manual_paused = False
             self.status = "Parado"
+            self.startup_message = ""
         if self.client:
             for asset in self.assets:
                 self.client.stop_candles_stream(asset.name, self.settings.timeframe)
@@ -366,6 +379,7 @@ class WebBot:
             self.negative_at_33_marks = set()
             self.positive_at_33_marks = set()
             self.pair_watch_states = {}
+            self.startup_message = ""
             self.status = "Aguardando login"
             self.last_account = {"connected": False, "mode": "DEMO", "currency": "", "balance": 0.0}
             self.settings_saved = False
@@ -423,7 +437,11 @@ class WebBot:
                 with self.lock:
                     if not self.operation_open:
                         self.last_signal = signal
-                        self.status = "Escaneando ativos em tempo real / aguardando sinal"
+                        self.status = (
+                            "Escaneando ativos em tempo real / aguardando sinal"
+                            if self.settings.enabled_strategies
+                            else "Nenhuma estrategia carregada"
+                        )
                 if signal and self.auto_trade and not self.operation_open:
                     if self.is_pair_watch_signal(signal):
                         self.start_pair_watch_trade(signal)
@@ -921,11 +939,11 @@ class WebBot:
                     self.last_signal = None
                     self.used_signal_keys.discard(self.signal_key_for_signal(signal))
                 elif self.executor and "stop win" in self.executor.current_trade.lower():
-                    self.stop_reason = "STOP WIN atingido. RobÃƒÂ´ parado."
+                    self.stop_reason = "Stop Win atingido. Robô parado."
                     self.status = self.stop_reason
                     self.running = False
                 elif self.executor and "stop loss" in self.executor.current_trade.lower():
-                    self.stop_reason = "STOP LOSS atingido. RobÃƒÂ´ parado."
+                    self.stop_reason = "Stop Loss atingido. Robô parado."
                     self.status = self.stop_reason
                     self.running = False
                 else:
@@ -993,17 +1011,17 @@ class WebBot:
 
     def finish_cycle_after_trade(self) -> None:
         if self.risk.check_stop_win(self.settings):
-            self.stop_reason = "STOP WIN atingido. RobÃƒÂ´ parado."
+            self.stop_reason = "Stop Win atingido. Robô parado."
             self.status = self.stop_reason
             self.running = False
             return
         if self.risk.check_stop_loss(self.settings):
-            self.stop_reason = "STOP LOSS atingido. RobÃƒÂ´ parado."
+            self.stop_reason = "Stop Loss atingido. Robô parado."
             self.status = self.stop_reason
             self.running = False
             return
-        self.next_strategy = "13 minutos sem 2 velas iguais; entrar somente em verde"
-        self.active_strategy = "Estrategia 02"
+        self.next_strategy = ""
+        self.active_strategy = ""
         self.status = "Escaneando ativos em tempo real / aguardando sinal"
 
     def start_scheduler(self) -> None:
@@ -1033,8 +1051,6 @@ class WebBot:
 
     def update_settings(self, payload: SettingsPayload) -> None:
         with self.lock:
-            self.settings.max_martingale = 1
-            self.settings.martingale_enabled = True
             if payload.entry_value is not None:
                 self.settings.entry_value = max(0.01, float(payload.entry_value))
             if payload.stop_win is not None:
@@ -1043,11 +1059,13 @@ class WebBot:
                 self.settings.stop_loss = max(0.0, float(payload.stop_loss))
             if payload.payout_min is not None:
                 self.settings.payout_min = max(1, min(100, int(payload.payout_min)))
-            enabled = payload.enabled_strategies if payload.enabled_strategies is not None else DEFAULT_ENABLED_STRATEGIES
+            if payload.max_martingale is not None:
+                self.settings.max_martingale = max(0, min(5, int(payload.max_martingale)))
+                self.settings.martingale_enabled = self.settings.max_martingale > 0
+            enabled = payload.enabled_strategies if payload.enabled_strategies is not None else self.settings.enabled_strategies
             self.settings.enabled_strategies = [key for key in enabled if key in STRATEGY_KEYS]
-            if not self.settings.enabled_strategies:
-                self.settings.enabled_strategies = list(DEFAULT_ENABLED_STRATEGIES)
-            self.settings.martingale_multiplier = 2.0
+            if payload.martingale_multiplier is not None:
+                self.settings.martingale_multiplier = max(1.0, float(payload.martingale_multiplier))
             if payload.schedule_enabled is not None:
                 self.schedule_enabled = False
             if payload.schedule_start is not None:
@@ -1081,16 +1099,14 @@ class WebBot:
         self.settings.stop_win = float(data.get("stop_win", self.settings.stop_win))
         self.settings.stop_loss = float(data.get("stop_loss", self.settings.stop_loss))
         self.settings.payout_min = int(data.get("payout_min", self.settings.payout_min))
-        self.settings.martingale_multiplier = 2.0
-        self.settings.max_martingale = 1
-        self.settings.martingale_enabled = True
+        self.settings.martingale_multiplier = max(1.0, float(data.get("martingale_multiplier", self.settings.martingale_multiplier)))
+        self.settings.max_martingale = max(0, min(5, int(data.get("max_martingale", self.settings.max_martingale))))
+        self.settings.martingale_enabled = self.settings.max_martingale > 0
         self.settings.pair_watch_minutes = 13
         enabled = data.get("enabled_strategies", DEFAULT_ENABLED_STRATEGIES)
         self.settings.enabled_strategies = [
             key for key in enabled if key in STRATEGY_KEYS
-        ] if isinstance(enabled, list) else list(DEFAULT_ENABLED_STRATEGIES)
-        if not self.settings.enabled_strategies:
-            self.settings.enabled_strategies = list(DEFAULT_ENABLED_STRATEGIES)
+        ] if isinstance(enabled, list) else []
         self.schedule_enabled = False
         self.schedule_start = str(data.get("schedule_start", self.schedule_start))
         self.schedule_stop = str(data.get("schedule_stop", self.schedule_stop))
@@ -1105,6 +1121,7 @@ class WebBot:
             "stop_loss": self.settings.stop_loss,
             "payout_min": self.settings.payout_min,
             "martingale_multiplier": self.settings.martingale_multiplier,
+            "max_martingale": self.settings.max_martingale,
             "enabled_strategies": self.settings.enabled_strategies,
             "schedule_enabled": self.schedule_enabled,
             "schedule_start": self.schedule_start,
@@ -1642,6 +1659,9 @@ class WebBot:
         return sorted(rows, key=lambda row: (-int(row.get("proximity", 0)), not row["hot"], row["asset"]))[:20]
 
     def strategy_moment_state(self, monitored_assets: list[dict]) -> dict:
+        if not self.settings.enabled_strategies:
+            return {"asset": None, "title": "", "detail": ""}
+
         if self.operation_open and self.last_signal:
             return {
                 "asset": self.last_signal.asset,
@@ -1669,16 +1689,21 @@ class WebBot:
 
         return {
             "asset": None,
-            "title": "Escaneando Estrategia 02",
-            "detail": "13 minutos sem verde+verde ou vermelho+vermelho; candidato entra somente em verde.",
+            "title": "Escaneando Estratégia 01",
+            "detail": "Aguardando o segundo 33, preço acima da MA21 e comparação com o fechamento anterior.",
         }
 
     def state(self) -> dict:
         paused = False
         candles = []
-        monitored_assets = self.monitored_assets_state()
+        robot_active = self.running or self.starting
+        monitored_assets = self.monitored_assets_state() if robot_active else []
         strategy_moment = self.strategy_moment_state(monitored_assets)
-        focus = self.asset_by_name(strategy_moment.get("asset")) or self.asset_by_name(self.focused_asset)
+        focus = (
+            self.asset_by_name(strategy_moment.get("asset")) or self.asset_by_name(self.focused_asset)
+            if robot_active
+            else None
+        )
         if focus and self.focused_asset != focus.name and not self.operation_open:
             self.focused_asset = focus.name
         moving_average = moving_average_snapshot(focus) if focus else moving_average_snapshot(Asset(name="", active_id=0, payout=0))
@@ -1721,18 +1746,19 @@ class WebBot:
             "status": self.status,
             "reentry_status": self.reentry_status(),
             "stop_reason": self.stop_reason,
+            "startup_message": self.startup_message if robot_active else "",
             "manual_paused": self.manual_paused,
             "settings_saved": self.settings_saved,
             "account": self.last_account,
-            "strategy": "Estrategia 02",
-            "strategy_detail": "13 minutos sem 2 velas iguais; quando fechar ou nascer verde, entrar em verde.",
-            "strategy_moment": strategy_moment["title"],
-            "strategy_moment_detail": strategy_moment["detail"],
+            "strategy": "",
+            "strategy_detail": "",
+            "strategy_moment": strategy_moment["title"] if robot_active else "",
+            "strategy_moment_detail": strategy_moment["detail"] if robot_active else "",
             "target_sequence": self.active_strategy,
             "next_sequence": self.next_strategy,
             "asset": focus.name if focus else None,
             "sequence": self.visual_sequence(focus) if focus else "-",
-            "signal": signal_payload(self.last_signal) if self.last_signal else None,
+            "signal": signal_payload(self.last_signal) if robot_active and self.last_signal else None,
             "trade": self.executor.current_trade if self.executor else "Nenhuma operaÃƒÂ§ÃƒÂ£o",
             "last_green_time": self.last_green_time,
             "moving_average": {
@@ -1741,7 +1767,7 @@ class WebBot:
             },
             "candles": candles,
             "monitored_assets": monitored_assets,
-            "pair_watch": self.pair_watch_payload(),
+            "pair_watch": self.pair_watch_payload() if robot_active else {"assets": []},
             "wins": wins,
             "losses": losses,
             "greens": wins,
@@ -1759,7 +1785,8 @@ class WebBot:
                 "timeframe": self.settings.timeframe,
                 "enabled_strategies": self.settings.enabled_strategies,
                 "strategy_options": [
-                    {"key": key, "label": label} for key, label in STRATEGY_OPTIONS
+                    {"key": key, "name": name, "movement": movement}
+                    for key, name, movement in STRATEGY_OPTIONS
                 ],
                 "schedule_enabled": self.schedule_enabled,
                 "schedule_start": self.schedule_start,
@@ -2286,6 +2313,8 @@ def api_hourly_sequences(asset: str = ""):
 
 @app.get("/api/monitored-hourly-sequences")
 def api_monitored_hourly_sequences(force: bool = False):
+    if not (bot.running or bot.starting):
+        return JSONResponse({"ok": True, "assets": [], "hours": []})
     try:
         result, error = bot.monitored_hourly_sequences(force=force)
     except Exception as exc:

@@ -1406,6 +1406,46 @@
       margin-bottom: 25px;
     }
 
+    .strategies-list {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .strategy-item {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-items: center;
+      gap: 16px;
+      min-height: 88px;
+      padding: 16px;
+      border: 1px solid var(--panel-border);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    .strategy-name {
+      display: block;
+      margin-bottom: 6px;
+      color: #fff;
+      font-family: var(--font-title);
+      font-size: 15px;
+      font-weight: 700;
+    }
+
+    .strategy-movement {
+      color: var(--text-muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .strategy-toggle {
+      width: 20px;
+      height: 20px;
+      accent-color: var(--accent);
+      cursor: pointer;
+    }
+
     /* Manual entries small controls */
     .btn-mini {
       padding: 6px 12px;
@@ -1458,6 +1498,11 @@
 
     /* Responsive adjustments */
     @media (max-width: 990px) {
+      body {
+        height: auto;
+        min-height: 100vh;
+        overflow: auto;
+      }
       .app-container {
         grid-template-columns: 1fr;
       }
@@ -1611,6 +1656,13 @@
       .settings-grid, .manual-entry-form-row {
         grid-template-columns: 1fr;
       }
+      .strategies-list {
+        grid-template-columns: 1fr;
+      }
+      .strategy-item {
+        min-height: 76px;
+        padding: 13px;
+      }
       .header-bar {
         flex-direction: column;
         align-items: flex-start;
@@ -1705,6 +1757,11 @@
             </button>
           </li>
           <li>
+            <button id="navStrategies" class="nav-btn hidden" onclick="showStrategiesPage()" title="Estratégias">
+              <i class="fa-solid fa-list-check"></i> <span>Estratégias</span>
+            </button>
+          </li>
+          <li>
             <button id="navSettings" class="nav-btn hidden" onclick="showSettingsPage()" title="Configurações">
               <i class="fa-solid fa-sliders"></i> <span>Configurações</span>
             </button>
@@ -1773,6 +1830,10 @@
 
       <!-- PAGE: INÍCIO (RADAR & ESTADÍSTICAS) -->
       <section id="inicioPage" class="hidden">
+        <div id="robotStartupNotice" class="panel hidden" style="margin-bottom: 16px; padding: 14px 18px; border-color: rgba(255, 102, 0, 0.45);">
+          <i id="robotStartupIcon" class="fa-solid fa-circle-notch fa-spin" style="color: var(--accent); margin-right: 9px;"></i>
+          <strong id="robotStartupText" style="font-size: 13px;"></strong>
+        </div>
         <div class="dashboard-layout">
           
           <div class="dashboard-grid">
@@ -2149,6 +2210,18 @@
         </div>
       </section>
 
+      <section id="strategiesPage" class="hidden">
+        <div class="panel">
+          <div id="strategiesList" class="strategies-list"></div>
+          <div id="strategiesActions" class="settings-actions hidden" style="margin-top: 18px;">
+            <button id="btnSaveStrategies" onclick="saveStrategies()" class="btn-action primary">
+              <i class="fa-solid fa-floppy-disk"></i> Salvar Estratégias
+            </button>
+          </div>
+          <p id="strategiesMsg" class="settings-msg" style="color: var(--accent);"></p>
+        </div>
+      </section>
+
       <section id="settingsPage" class="hidden">
         <div class="panel">
           <div class="tabs-header">
@@ -2174,6 +2247,10 @@
               <div class="form-group">
                 <label for="cfgMultiplier">Multiplicador Gale</label>
                 <input id="cfgMultiplier" type="number" class="input-field" min="1.0" step="0.1" value="2.0" />
+              </div>
+              <div class="form-group">
+                <label for="cfgMaxGales">Quantidade de Gales</label>
+                <input id="cfgMaxGales" type="number" class="input-field" min="0" max="5" step="1" value="1" />
               </div>
             </div>
 
@@ -2274,8 +2351,8 @@
           </div>
         </div>
 
-        <!-- Row 1: Net Profit Evolution and Best/Worst strategies -->
-        <div class="results-grid-3" style="align-items: stretch;">
+        <!-- Row 1: Net Profit Evolution and strategy performance -->
+        <div class="results-grid-2" style="align-items: stretch;">
           
           <!-- Card 1: Balance Evolution Line Chart -->
           <div class="panel" style="display: flex; flex-direction: column; padding: 20px; justify-content: space-between;">
@@ -2285,19 +2362,14 @@
             </div>
           </div>
 
-          <!-- Card 2: Strategies Best -->
+          <!-- Card 2: Strategy summary -->
           <div class="panel" style="display: flex; flex-direction: column; padding: 20px;">
-            <h3 class="panel-title" style="margin-bottom: 15px; font-size: 13px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted);"><i class="fa-solid fa-square-check" style="color: #00e676; margin-right: 5px;"></i> Estratégias que funcionam</h3>
-            <div id="strategiesBestList" style="display: flex; flex-direction: column; gap: 12px; flex-grow: 1; justify-content: center;">
-              <!-- Dynamic entries here -->
-            </div>
-          </div>
-
-          <!-- Card 3: Strategies Worst -->
-          <div class="panel" style="display: flex; flex-direction: column; padding: 20px;">
-            <h3 class="panel-title" style="margin-bottom: 15px; font-size: 13px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted);"><i class="fa-solid fa-square-xmark" style="color: var(--accent); margin-right: 5px;"></i> Estratégias que não funcionam</h3>
-            <div id="strategiesWorstList" style="display: flex; flex-direction: column; gap: 12px; flex-grow: 1; justify-content: center;">
-              <!-- Dynamic entries here -->
+            <h3 class="panel-title" style="margin-bottom: 15px; font-size: 13px; letter-spacing: 0.8px; text-transform: uppercase; color: var(--text-muted);"><i class="fa-solid fa-chart-simple" style="color: var(--accent); margin-right: 5px;"></i> Desempenho por Estratégia</h3>
+            <div class="table-container">
+              <table class="data-table">
+                <thead><tr><th>Estratégia</th><th>Acertos</th><th>Erros</th><th>Total</th><th>Assertividade</th></tr></thead>
+                <tbody id="strategiesSummaryRows"></tbody>
+              </table>
             </div>
           </div>
 
@@ -2477,6 +2549,7 @@
     let connected = false;
     let settingsDirty = false;
     let settingsHydrated = false;
+    let strategiesDirty = false;
     let sequenceRefreshTimer = null;
     let currentActivePage = "loginPage";
     let lastKnownTotalOps = null;
@@ -2490,13 +2563,14 @@
     let targetX = 100;
     let targetY = 100;
 
-    const pages = ["loginPage", "inicioPage", "sequencesPage", "pairWatchPage", "brokerPage", "settingsPage", "resultadosPage"];
+    const pages = ["loginPage", "inicioPage", "sequencesPage", "pairWatchPage", "brokerPage", "strategiesPage", "settingsPage", "resultadosPage"];
     const navs = {
       loginPage: "navLogin",
       inicioPage: "navInicio",
       sequencesPage: "navSequences",
       pairWatchPage: "navPairWatch",
       brokerPage: "navBroker",
+      strategiesPage: "navStrategies",
       settingsPage: "navSettings",
       resultadosPage: "navResultados"
     };
@@ -2524,10 +2598,6 @@
       }
       setPage("inicioPage", "Painel de Operações");
       startPolling();
-      const data = await request("/api/state");
-      if (!data.running && !data.starting) {
-        await request("/api/monitor", {method: "POST"});
-      }
       await refresh();
     }
 
@@ -2549,6 +2619,70 @@
       }
       setPage("pairWatchPage", "Pares 13min");
       startPolling();
+      await refresh();
+    }
+
+    async function showStrategiesPage() {
+      if (!connected) {
+        showLogin();
+        return;
+      }
+      setPage("strategiesPage", "Estratégias");
+      strategiesDirty = false;
+      await refresh();
+    }
+
+    function renderStrategies(settings) {
+      if (strategiesDirty) return;
+      const container = $("strategiesList");
+      const actions = $("strategiesActions");
+      const options = Array.isArray(settings?.strategy_options) ? settings.strategy_options : [];
+      const enabled = new Set(Array.isArray(settings?.enabled_strategies) ? settings.enabled_strategies : []);
+      container.replaceChildren();
+      actions.classList.toggle("hidden", options.length === 0);
+
+      options.forEach(strategy => {
+        const item = document.createElement("label");
+        item.className = "strategy-item";
+
+        const description = document.createElement("span");
+        const name = document.createElement("strong");
+        name.className = "strategy-name";
+        name.textContent = strategy.name || "";
+        const movement = document.createElement("span");
+        movement.className = "strategy-movement";
+        movement.textContent = strategy.movement || "";
+        description.append(name, movement);
+
+        const toggle = document.createElement("input");
+        toggle.type = "checkbox";
+        toggle.className = "strategy-toggle";
+        toggle.value = strategy.key;
+        toggle.checked = enabled.has(strategy.key);
+        toggle.setAttribute("aria-label", `Operar ${strategy.name || "estratégia"}`);
+        toggle.addEventListener("change", () => {
+          strategiesDirty = true;
+          $("strategiesMsg").textContent = "";
+        });
+        item.append(description, toggle);
+        container.appendChild(item);
+      });
+    }
+
+    async function saveStrategies() {
+      const enabledStrategies = Array.from(
+        document.querySelectorAll("#strategiesList .strategy-toggle:checked"),
+        input => input.value
+      );
+      $("btnSaveStrategies").disabled = true;
+      const data = await request("/api/settings", {
+        method: "POST",
+        headers: {"Content-Type": "application/json"},
+        body: JSON.stringify({enabled_strategies: enabledStrategies})
+      });
+      strategiesDirty = false;
+      $("strategiesMsg").textContent = data.ok ? "Estratégias atualizadas." : "Não foi possível salvar as estratégias.";
+      $("btnSaveStrategies").disabled = false;
       await refresh();
     }
 
@@ -2778,52 +2912,30 @@
     }
 
     function renderStrategiesRanking(best, worst) {
-      const bestList = $("strategiesBestList");
-      const worstList = $("strategiesWorstList");
-      const strategyRow = (s, type) => {
-        const isLoss = type === "loss";
-        const rate = Number(isLoss ? s.loss_rate : s.win_rate) || 0;
-        const wins = Number(s.wins || 0);
-        const losses = Number(s.losses || 0);
-        const total = Number(s.total || 0);
-        const color = isLoss ? "var(--accent)" : "#00e676";
-        const summary = total
-          ? `${total} operaç${total === 1 ? "ão" : "ões"} hoje`
-          : "Aguardando operações hoje";
+      const rows = $("strategiesSummaryRows");
+      if (!rows) return;
+      const strategies = Array.from(
+        new Map([...(best || []), ...(worst || [])].map(item => [item.name, item])).values()
+      ).sort((a, b) => String(a.name).localeCompare(String(b.name), "pt-BR"));
+      if (!strategies.length) {
+        rows.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">Nenhuma estratégia possui operações.</td></tr>';
+        return;
+      }
+      rows.innerHTML = strategies.map(item => {
+        const wins = Number(item.wins || 0);
+        const losses = Number(item.losses || 0);
+        const total = Number(item.total || 0);
+        const rate = Number(item.win_rate || 0);
         return `
-            <div style="display:flex; flex-direction:column; gap: 7px;">
-              <div style="display:flex; justify-content:space-between; gap:10px; font-size:12px; font-weight:700;">
-                <span style="color:#fff; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">${s.name}</span>
-                <span style="color:${color}; flex-shrink:0;">${rate.toFixed(1)}%</span>
-              </div>
-              <div style="width:100%; height:6px; background:#121217; border-radius:3px; overflow:hidden;">
-                <div style="height:100%; width:${Math.min(100, Math.max(0, rate))}%; background:${color}; border-radius:3px;"></div>
-              </div>
-              <div style="display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:6px;">
-                <span style="border:1px solid rgba(0,230,118,0.25); background:rgba(0,230,118,0.08); color:#00e676; border-radius:6px; padding:5px 4px; font-size:10px; font-weight:800; text-align:center;">Acertou ${wins}</span>
-                <span style="border:1px solid rgba(255,102,0,0.25); background:rgba(255,102,0,0.08); color:var(--accent); border-radius:6px; padding:5px 4px; font-size:10px; font-weight:800; text-align:center;">Errou ${losses}</span>
-                <span style="border:1px solid var(--panel-border); background:rgba(255,255,255,0.03); color:var(--text-muted); border-radius:6px; padding:5px 4px; font-size:10px; font-weight:800; text-align:center;">Total ${total}</span>
-              </div>
-              <div style="font-size:10px; color:var(--text-muted); font-weight:600;">${summary}</div>
-            </div>
-          `;
-      };
-
-      if (bestList) {
-        if (!best.length) {
-          bestList.innerHTML = '<div style="text-align:center; color:var(--text-muted); font-size:12px;">Aguardando operações hoje</div>';
-        } else {
-          bestList.innerHTML = best.slice(0, 5).map(s => strategyRow(s, "win")).join("");
-        }
-      }
-
-      if (worstList) {
-        if (!worst.length) {
-          worstList.innerHTML = '<div style="text-align:center; color:var(--text-muted); font-size:12px;">Aguardando operações hoje</div>';
-        } else {
-          worstList.innerHTML = worst.slice(0, 5).map(s => strategyRow(s, "loss")).join("");
-        }
-      }
+          <tr>
+            <td><strong>${item.name}</strong></td>
+            <td style="color:var(--green); font-weight:700;">${wins}</td>
+            <td style="color:var(--accent); font-weight:700;">${losses}</td>
+            <td>${total}</td>
+            <td><strong>${rate.toFixed(1)}%</strong></td>
+          </tr>
+        `;
+      }).join("");
     }
 
     function renderHeatmapGrid(heatmap) {
@@ -3076,6 +3188,7 @@
         $("navPairWatch").classList.remove("hidden");
         $("navBroker").classList.remove("hidden");
         $("navResultados").classList.remove("hidden");
+        $("navStrategies").classList.remove("hidden");
         $("navSettings").classList.remove("hidden");
         $("btnExitSidebar").classList.remove("hidden");
 
@@ -3089,6 +3202,8 @@
     }
 
     async function startBot() {
+      $("settingsMsg").textContent = "Carregando estrategias...";
+      showInicioPage();
       const data = await request("/api/start", {method: "POST"});
       if (!data.ok) {
         $("settingsMsg").textContent = data.error || "Salve as configurações antes de iniciar.";
@@ -3126,6 +3241,7 @@
         stop_win: Number($("cfgStopWin").value || 0),
         stop_loss: Number($("cfgStopLoss").value || 0),
         martingale_multiplier: Number($("cfgMultiplier").value || 0),
+        max_martingale: Number($("cfgMaxGales").value || 0),
         schedule_enabled: false,
         schedule_start: "",
         schedule_stop: ""
@@ -3190,6 +3306,7 @@
       $("navPairWatch").classList.add("hidden");
       $("navBroker").classList.add("hidden");
       $("navResultados").classList.add("hidden");
+      $("navStrategies").classList.add("hidden");
       $("navSettings").classList.add("hidden");
       $("btnExitSidebar").classList.add("hidden");
       
@@ -3407,6 +3524,7 @@
           $("navPairWatch").classList.remove("hidden");
           $("navBroker").classList.remove("hidden");
           $("navResultados").classList.remove("hidden");
+          $("navStrategies").classList.remove("hidden");
           $("navSettings").classList.remove("hidden");
           $("btnExitSidebar").classList.remove("hidden");
         } else {
@@ -3417,6 +3535,7 @@
           $("navPairWatch").classList.add("hidden");
           $("navBroker").classList.add("hidden");
           $("navResultados").classList.add("hidden");
+          $("navStrategies").classList.add("hidden");
           $("navSettings").classList.add("hidden");
           $("btnExitSidebar").classList.add("hidden");
           if (currentActivePage !== "loginPage") showLogin();
@@ -3473,6 +3592,7 @@
 
         // Sync Settings fields if not modified
         fillSettingsInputs(data.settings || {});
+        renderStrategies(data.settings || {});
         updateBotActionButtons(data);
         renderHistoricalTrades(data.results || []);
         renderManualAgendas(data.manual_entries || []);
@@ -3514,7 +3634,17 @@
           cardPanel.classList.remove("executing-order-glow", "call-glow", "put-glow");
         }
 
-        if (resultOverlayTimeout !== null) {
+        const robotActive = Boolean(data.running || data.starting);
+        const startupNotice = $("robotStartupNotice");
+        startupNotice.classList.toggle("hidden", !robotActive);
+        if (robotActive) {
+          $("robotStartupText").textContent = data.startup_message || (data.starting ? "Carregando estrategias..." : "Estrategias carregadas: nenhuma.");
+          $("robotStartupIcon").className = data.starting
+            ? "fa-solid fa-circle-notch fa-spin"
+            : "fa-solid fa-circle-check";
+        }
+
+        if (robotActive && resultOverlayTimeout !== null) {
           $("radarStatePanel").classList.add("hidden");
           $("entryStatePanel").classList.add("hidden");
           $("resultStatePanel").classList.remove("hidden");
@@ -3587,7 +3717,7 @@
           } else {
             $("entryGaleWarn").classList.add("hidden");
           }
-        } else {
+        } else if (robotActive) {
           $("radarStatePanel").classList.remove("hidden");
           $("entryStatePanel").classList.add("hidden");
           $("resultStatePanel").classList.add("hidden");
@@ -3598,12 +3728,21 @@
 
           // Sync Horizontal Scanner Info Bar below Radar
           $("scanAsset").textContent = formatAssetName(data.asset);
-          $("scanStrategy").textContent = data.strategy_moment || "-";
-          $("scanStrategyDesc").textContent = data.strategy_moment_detail || "Aguardando formação do padrão...";
+          const hasStrategies = Array.isArray(data.settings?.enabled_strategies) && data.settings.enabled_strategies.length > 0;
+          $("scanStrategy").textContent = hasStrategies ? (data.strategy_moment || "-") : "";
+          $("scanStrategyDesc").textContent = hasStrategies ? (data.strategy_moment_detail || "Aguardando formação do padrão...") : "";
           $("scanStatusText").textContent = data.status || "Procurando Entrada...";
 
           // Trigger single active target draw inside SVG
           updateRadarActiveTarget(data.asset);
+        } else {
+          $("radarStatePanel").classList.add("hidden");
+          $("entryStatePanel").classList.add("hidden");
+          $("resultStatePanel").classList.add("hidden");
+          $("scanAsset").textContent = "-";
+          $("scanStrategy").textContent = "";
+          $("scanStrategyDesc").textContent = "";
+          updateRadarActiveTarget(null);
         }
 
       } catch (err) {
@@ -3615,8 +3754,12 @@
       const upper = String(text).toUpperCase();
       if (upper.includes("ORDEM CONFIRMADA")) return "Confirmada, aguardando";
       if (upper.includes("SINAL ENCONTRADO")) return "Preparando entrada";
-      if (upper.includes("PREPARANDO ENTRADA")) return countdownStatus(text, "Entrada em");
-      if (upper.includes("AGUARDANDO SEGUNDO")) return countdownStatus(text, "Entrada em");
+      if (/G\d+:/.test(upper) && Number.isFinite(parseCountdownSeconds(text))) {
+        const gale = upper.match(/G\d+/)?.[0] || "Gale";
+        return countdownStatus(text, `${gale} em`);
+      }
+      if (upper.includes("ENTRADA PRINCIPAL EM") || upper.includes("PREPARANDO ENTRADA")) return countdownStatus(text, "Entrada em");
+      if (upper.includes("ENTRADA NO SEGUNDO") || upper.includes("AGUARDANDO SEGUNDO")) return countdownStatus(text, "Entrada em");
       if (upper.includes("G1")) return "Gale 1";
       if (upper.includes("ENTRADA")) return "Ordem principal";
       if (upper.includes("WIN") || upper.includes("LUCRO")) return "Finalizando WIN";
@@ -3638,14 +3781,19 @@
 
     function syncEntryCountdown(text) {
       const upper = String(text || "").toUpperCase();
-      const isCountdown = upper.includes("PREPARANDO ENTRADA") || upper.includes("AGUARDANDO SEGUNDO");
+      const galeMatch = upper.match(/G\d+/);
+      const isCountdown = upper.includes("ENTRADA PRINCIPAL EM")
+        || upper.includes("ENTRADA NO SEGUNDO")
+        || upper.includes("PREPARANDO ENTRADA")
+        || upper.includes("AGUARDANDO SEGUNDO")
+        || Boolean(galeMatch);
       const seconds = parseCountdownSeconds(text);
       if (!isCountdown || !Number.isFinite(seconds)) {
         clearEntryCountdown();
         return;
       }
 
-      entryCountdownPrefix = upper.includes("PREPARANDO ENTRADA") ? "Proximo candle em" : "Entrada em";
+      entryCountdownPrefix = galeMatch ? `${galeMatch[0]} em` : "Entrada em";
       entryCountdownDeadline = Date.now() + Math.max(0, seconds) * 1000;
       if (!entryCountdownTimer) {
         entryCountdownTimer = setInterval(updateEntryCountdownDisplay, 100);
@@ -3738,6 +3886,7 @@
       if (settings.stop_win !== undefined) $("cfgStopWin").value = settings.stop_win;
       if (settings.stop_loss !== undefined) $("cfgStopLoss").value = settings.stop_loss;
       if (settings.martingale_multiplier !== undefined) $("cfgMultiplier").value = settings.martingale_multiplier;
+      if (settings.max_martingale !== undefined) $("cfgMaxGales").value = settings.max_martingale;
       
       settingsHydrated = true;
     }
@@ -3889,7 +4038,7 @@
     }
 
     // Event listener for inputs change
-    ["cfgEntry", "cfgStopWin", "cfgStopLoss", "cfgMultiplier"].forEach(id => {
+    ["cfgEntry", "cfgStopWin", "cfgStopLoss", "cfgMultiplier", "cfgMaxGales"].forEach(id => {
       $(id).addEventListener("input", () => {
         settingsDirty = true;
         updateBotActionButtons();

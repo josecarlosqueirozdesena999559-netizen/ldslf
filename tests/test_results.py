@@ -67,8 +67,33 @@ class ResultAccountingTests(unittest.TestCase):
             allowed = executor.ensure_candle_open_entry(BotSettings(timeframe="M1"))
 
         self.assertTrue(allowed)
-        sleep_until.assert_called_once_with(119.65, "Preparando entrada no proximo candle")
-        self.assertIn("Preparando entrada no proximo candle", executor.current_trade)
+        sleep_until.assert_called_once_with(119.65, "Preparando entrada no próximo candle")
+        self.assertIn("Preparando entrada no próximo candle", executor.current_trade)
+
+    def test_martingale_uses_configured_multiplier(self) -> None:
+        executor = object.__new__(TradeExecutor)
+        settings = BotSettings(entry_value=10.0, martingale_multiplier=1.5)
+
+        self.assertEqual(executor.apply_martingale(settings, 1), 15.0)
+        self.assertEqual(executor.apply_martingale(settings, 2), 22.5)
+
+    def test_signal_reentries_never_exceed_configured_gales(self) -> None:
+        signal = type("Signal", (), {"max_entries": 5})()
+
+        self.assertEqual(
+            TradeExecutor.max_steps_for_signal(
+                signal,
+                BotSettings(max_martingale=2, martingale_enabled=True),
+            ),
+            2,
+        )
+        self.assertEqual(
+            TradeExecutor.max_steps_for_signal(
+                signal,
+                BotSettings(max_martingale=0, martingale_enabled=False),
+            ),
+            0,
+        )
 
     def test_entry_inside_open_grace_is_allowed(self) -> None:
         executor = object.__new__(TradeExecutor)
@@ -119,14 +144,6 @@ class ResultAccountingTests(unittest.TestCase):
 
         self.assertIsNone(executor.execute_cycle(signal, BotSettings(), "DEMO"))
         self.assertIn("Falha ao abrir ordem", executor.current_trade)
-
-    def test_strategy_01_g1_waits_pullback_before_reentry(self) -> None:
-        anchor = Candle(open=1.0, close=0.70, high=1.0, low=0.70, timestamp=60, closed=True)
-        weak_pullback = Candle(open=0.70, close=0.72, high=0.72, low=0.70, timestamp=120, closed=False)
-        enough_pullback = Candle(open=0.70, close=0.76, high=0.76, low=0.70, timestamp=120, closed=False)
-
-        self.assertFalse(TradeExecutor.has_strategy_01_pullback_for_reentry([anchor, weak_pullback]))
-        self.assertTrue(TradeExecutor.has_strategy_01_pullback_for_reentry([anchor, enough_pullback]))
 
     def test_pair_watch_counts_equal_pairs_in_13_candles(self) -> None:
         candles = [

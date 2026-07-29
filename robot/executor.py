@@ -9,9 +9,6 @@ from models.trade import Signal, TradeResult
 from robot.martingale import attempt_name, get_next_value
 from robot.risk import RiskManager
 from robot.strategy import (
-    CANDLE_LOOKBACK,
-    STRATEGY_01_MIN_PULLBACK_PRICE_RATIO,
-    STRATEGY_01_PULLBACK_BODY_RATIO,
     is_allowed_strategy_signal,
 )
 from storage.history import HistoryStore
@@ -58,10 +55,11 @@ class TradeExecutor:
 
     @staticmethod
     def max_steps_for_signal(signal: Signal, settings: BotSettings) -> int:
+        configured_steps = settings.max_martingale if settings.martingale_enabled else 0
         max_entries = getattr(signal, "max_entries", 0)
         if max_entries:
-            return max(0, int(max_entries) - 1)
-        return settings.max_martingale if settings.martingale_enabled else 0
+            return min(configured_steps, max(0, int(max_entries) - 1))
+        return configured_steps
 
     def execute_cycle(self, signal: Signal, settings: BotSettings, account_mode: str) -> TradeResult | None:
         if not self._operation_lock.acquire(blocking=False):
@@ -112,7 +110,12 @@ class TradeExecutor:
             platform_direction = "call" if direction == "CALL" else "put"
             self.current_trade = f"ENTRADA {direction} {signal.asset} {signal.pattern} {attempt_name(step)} R$ {value:.2f}"
             self.logger.info("[TRADE] sinal=%s plataforma=%s ativo=%s valor=%.2f", direction, platform_direction, signal.asset, value)
-            if not self.wait_entry_time(signal, settings):
+            entry_ready = (
+                self.wait_entry_time(signal, settings, step)
+                if step
+                else self.wait_entry_time(signal, settings)
+            )
+            if not entry_ready:
                 return last_trade
             elapsed = (datetime.now() - signal.timestamp).total_seconds()
             if elapsed >= window_seconds:
@@ -174,8 +177,6 @@ class TradeExecutor:
             balance_before = balance_after
             self.current_trade = f"Parcial {signal.asset}; fazendo G{step} R$ {next_value:.2f}"
             self.logger.info("[MARTINGALE] G%s valor %.2f", step, next_value)
-            if not self.wait_strategy_01_reentry_pullback(signal, settings, step, window_seconds):
-                return last_trade
 
     def execute_single(self, signal: Signal, settings: BotSettings, account_mode: str, note: str) -> TradeResult | None:
         if not self._operation_lock.acquire(blocking=False):
@@ -249,25 +250,26 @@ class TradeExecutor:
         if wait > 2:
             time.sleep(wait)
 
-    def wait_entry_time(self, signal: Signal, settings: BotSettings) -> bool:
+    def wait_entry_time(self, signal: Signal, settings: BotSettings, step: int = 0) -> bool:
         if getattr(signal, "enter_on_signal", False):
             return True
         entry_second = getattr(signal, "entry_second", None)
         if entry_second is None:
-            return self.ensure_candle_open_entry(settings)
-        self.wait_entry_second(signal)
+            return self.ensure_candle_open_entry(settings, step)
+        self.wait_entry_second(signal, step)
         return True
 
-    def ensure_candle_open_entry(self, settings: BotSettings) -> bool:
+    def ensure_candle_open_entry(self, settings: BotSettings, step: int = 0) -> bool:
         duration_seconds = {"M1": 60, "M5": 300, "M15": 900}[settings.timeframe]
         now = time.time()
         candle_second = now % duration_seconds
         if candle_second <= ENTRY_OPEN_GRACE_SECONDS:
             return True
         wait = max(0.0, duration_seconds - candle_second - ENTRY_PREPARE_LEAD_SECONDS)
-        self.current_trade = f"Preparando entrada no proximo candle ({wait:.2f}s)"
+        prefix = f"G{step}: próxima entrada em" if step else "Preparando entrada no próximo candle"
+        self.current_trade = f"{prefix} ({wait:.2f}s)"
         self.logger.info("[TRADE] preparando entrada para proximo candle: %.2fs", wait)
-        self.sleep_until(time.time() + wait, "Preparando entrada no proximo candle")
+        self.sleep_until(time.time() + wait, prefix)
         return True
 
     def sleep_until(self, target: float, status_prefix: str | None = None) -> None:
@@ -279,61 +281,18 @@ class TradeExecutor:
                 self.current_trade = f"{status_prefix} ({remaining:.2f}s)"
             time.sleep(min(ENTRY_POLL_SECONDS, remaining))
 
-    def wait_entry_second(self, signal: Signal) -> None:
+    def wait_entry_second(self, signal: Signal, step: int = 0) -> None:
         entry_second = getattr(signal, "entry_second", None)
         if entry_second is None:
             return
         current_second = int(time.time()) % 60
         wait = (int(entry_second) - current_second) % 60
         if wait > 0:
+            prefix = f"G{step}: entrada no segundo {entry_second} em" if step else f"Entrada no segundo {entry_second} em"
             self.sleep_until(
                 time.time() + wait,
-                f"Aguardando segundo {entry_second} para entrada",
+                prefix,
             )
-
-    def wait_strategy_01_reentry_pullback(
-        self,
-        signal: Signal,
-        settings: BotSettings,
-        step: int,
-        window_seconds: int,
-    ) -> bool:
-        pattern = (signal.pattern or "").lower()
-        if step <= 0 or signal.direction != "PUT" or "estrategia 01" not in pattern or "repique" not in pattern:
-            return True
-
-        while True:
-            elapsed = (datetime.now() - signal.timestamp).total_seconds()
-            if elapsed >= window_seconds:
-                window_minutes = max(1, int(window_seconds // 60))
-                self.logger.info("[MARTINGALE] G%s cancelado: janela encerrada apos %s minutos", step, window_minutes)
-                self.current_trade = f"G{step} cancelado: estrategia encerrou em {window_minutes} minutos"
-                return False
-
-            candles = self.client.get_realtime_candles(signal.asset, settings.timeframe, CANDLE_LOOKBACK)
-            if self.has_strategy_01_pullback_for_reentry(candles):
-                self.logger.info("[MARTINGALE] G%s repique confirmado para vender melhor", step)
-                self.current_trade = f"G{step}: repique confirmado; vendendo melhor"
-                return True
-
-            remaining = max(0.0, window_seconds - elapsed)
-            self.current_trade = f"G{step}: aguardando subir um pouco para vender ({remaining:.1f}s)"
-            time.sleep(ENTRY_POLL_SECONDS)
-
-    @staticmethod
-    def has_strategy_01_pullback_for_reentry(candles) -> bool:
-        closed = [candle for candle in candles if getattr(candle, "closed", False)]
-        current = candles[-1] if candles else None
-        if not closed or current is None or getattr(current, "closed", False):
-            return False
-
-        anchor = closed[-1]
-        anchor_body = abs(anchor.open - anchor.close)
-        minimum_pullback = max(
-            anchor_body * STRATEGY_01_PULLBACK_BODY_RATIO,
-            abs(anchor.close) * STRATEGY_01_MIN_PULLBACK_PRICE_RATIO,
-        )
-        return current.close - current.open >= minimum_pullback
 
     def resolve_robot_order_result(
         self,
