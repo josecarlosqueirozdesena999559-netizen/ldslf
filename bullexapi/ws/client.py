@@ -182,11 +182,20 @@ class WebsocketClient(object):
         logger.debug("Websocket client connected.")
         global_value.check_websocket_if_connect = 1
 
-    def on_close(self, close_status_code=None, close_msg=None):
+    def on_close(self, wss, close_status_code=None, close_msg=None):
         """Called when websocket connection is closed.
         
+        :param wss: WebSocketApp instance that was closed.
         :param close_status_code: Status code for close connection.
         :param close_msg: Message explaining why connection was closed.
         """
-        logging.debug("WebSocketClient closed connection.")
-        self.connected = False
+        logging.warning(
+            "WebSocket fechado (codigo=%s, motivo=%s).",
+            close_status_code,
+            close_msg,
+        )
+        global_value.check_websocket_if_connect = 0
+        global_value.check_websocket_if_error = True
+        global_value.websocket_error_reason = (
+            str(close_msg) if close_msg else f"WebSocket fechado ({close_status_code})"
+        )

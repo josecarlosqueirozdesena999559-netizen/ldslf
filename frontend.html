@@ -3684,18 +3684,9 @@
     function shortStrategyLabel(text) {
       const raw = String(text || "").trim();
       const upper = raw.toUpperCase();
-      if (upper.includes("NEGATIVO AOS 33S")) return "CALL MA21 Virada";
-      if (upper.includes("VERDE AOS 33S")) return "PUT MA21 Virada";
-      if (upper.includes("VELAS 5, 6 E 7")) return "MA21 Sem Pavio";
-      if (upper.includes("COMPRA NO 33") || upper.includes("COMPRAR NO SEGUNDO 33")) return "CALL MA21 33s";
-      if (upper.includes("VENDA NO 33") || upper.includes("VENDIDO NO SEGUNDO 33")) return "PUT MA21 33s";
-      if (upper.includes("MA21") && upper.includes("CALL")) return "CALL MA21 33s";
-      if (upper.includes("MA21") && upper.includes("PUT")) return "PUT MA21 33s";
       if (upper.includes("ESTRATEGIA 02") || upper.includes("ESTRATÉGIA 02") || upper.includes("SEM 2 CANDLES IGUAIS")) return "Estrategia 02";
       if (upper.includes("ESTRATEGIA 01") || upper.includes("ESTRATÉGIA 01")) return "Estrategia 01";
       if (upper.includes("ESTRATEGIA 05") || upper.includes("ESTRATÉGIA 05")) return "Estrategia 05";
-      if (upper.includes("REVERS")) return "Reversao";
-      if (upper.includes("CONTINUA")) return "Continuacao";
       return raw.length > 28 ? `${raw.slice(0, 25)}...` : raw;
     }
 

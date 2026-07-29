@@ -311,7 +311,7 @@ class ResultAccountingTests(unittest.TestCase):
         engine = object.__new__(RobotEngine)
         engine.asset_strategy_cooldowns = {}
         asset = type("Asset", (), {"name": "EURUSD"})()
-        signal = type("Signal", (), {"asset": "EURUSD", "pattern": "comprar no segundo 33 com entrada e G1"})()
+        signal = type("Signal", (), {"asset": "EURUSD", "pattern": "Estrategia 01: entrada e G1"})()
         other_signal = type("Signal", (), {"asset": "EURUSD", "pattern": "Estrategia 05"})()
 
         engine.mark_strategy_cooldown(signal)
@@ -323,12 +323,14 @@ class ResultAccountingTests(unittest.TestCase):
         self.assertFalse(engine.is_strategy_in_cooldown(asset, signal))
 
     def test_strategy_classifier_uses_real_robot_families(self) -> None:
-        self.assertEqual(strategy_name_from_pattern("Estrategia 05: vermelho, verde, vermelho e verde"), "Estrategia 05")
-        self.assertEqual(strategy_name_from_pattern("Vermelho sem pavio abaixo da MA21 + velas 5, 6 e 7"), "MA21 Sem Pavio")
-        self.assertEqual(strategy_name_from_pattern("Verde rompeu a MA21; comprar no segundo 33"), "CALL MA21 33s")
-        self.assertEqual(strategy_name_from_pattern("Vermelho rompeu a MA21; operar vendido no segundo 33"), "PUT MA21 33s")
-        self.assertEqual(strategy_name_from_pattern("Candle ficou negativo aos 33s e fechou verde positivo"), "CALL MA21 Virada")
-        self.assertEqual(strategy_name_from_pattern("Candle ficou verde aos 33s e fechou vermelho negativo"), "PUT MA21 Virada")
+        self.assertEqual(
+            strategy_name_from_pattern("Estrategia 05: verde acima do anterior e da MA21 apos 33s"),
+            "Estrategia 05",
+        )
+        self.assertEqual(
+            strategy_name_from_pattern("Estrategia 02: 13 minutos sem 2 candles iguais"),
+            "Estrategia 02",
+        )
 
     def test_history_without_pattern_is_not_labeled_strategy_01(self) -> None:
         row = normalize_history_trade({"asset": "EURUSD", "result": "WIN", "profit": 1.2}, 0)

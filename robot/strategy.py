@@ -4,16 +4,10 @@ from models.asset import Asset
 from models.candle import Candle
 from models.trade import Signal
 
+
 MOVING_AVERAGE_PERIOD = 21
 CANDLE_LOOKBACK = 30
-TREND_SEQUENCE_MIN = 8
-REVERSAL_CONFIRMATION_CANDLES = 2
-STRATEGY_03_REVERSAL_CANDLES = 3
 REVERSAL_WINDOW_SECONDS = 300
-CONTINUATION_WINDOW_SECONDS = 600
-MA21_WICKLESS_WINDOW_SECONDS = 600
-MA21_GREEN_BUY_WINDOW_SECONDS = 300
-NEGATIVE_33_GREEN_CLOSE_WINDOW_SECONDS = 300
 STRATEGY_01_PULLBACK_BODY_RATIO = 0.15
 STRATEGY_01_MIN_PULLBACK_PRICE_RATIO = 0.00005
 STRATEGY_PATTERN_MARKERS = (
@@ -30,7 +24,6 @@ def make_signal(
     sequence_color: str | None,
     window_seconds: int,
     max_entries: int = 2,
-    entry_second: int | None = None,
     enter_on_signal: bool = False,
 ) -> Signal:
     return Signal(
@@ -43,7 +36,6 @@ def make_signal(
         timestamp=datetime.now(),
         strategy_window_seconds=window_seconds,
         max_entries=max_entries,
-        entry_second=entry_second,
         enter_on_signal=enter_on_signal,
     )
 
@@ -60,15 +52,13 @@ def moving_average(candles: list[Candle], period: int = MOVING_AVERAGE_PERIOD) -
     closed = [candle for candle in candles if candle.closed]
     if len(closed) < period:
         return None
-    closes = [candle.close for candle in closed[-period:]]
-    return sum(closes) / period
+    return sum(candle.close for candle in closed[-period:]) / period
 
 
 def moving_average_at(candles: list[Candle], index: int, period: int = MOVING_AVERAGE_PERIOD) -> float | None:
     if index < period - 1:
         return None
-    closes = [candle.close for candle in candles[index - period + 1 : index + 1]]
-    return sum(closes) / period
+    return sum(candle.close for candle in candles[index - period + 1 : index + 1]) / period
 
 
 def moving_average_slope_at(candles: list[Candle], index: int, period: int = MOVING_AVERAGE_PERIOD) -> float | None:
@@ -82,19 +72,12 @@ def moving_average_slope_at(candles: list[Candle], index: int, period: int = MOV
 def candle_close_second(candle: Candle) -> int:
     timestamp = candle.update_timestamp or candle.timestamp
     try:
+        elapsed = int(timestamp) - int(candle.timestamp)
+        if 0 <= elapsed < 60:
+            return elapsed
         return int(timestamp) % 60
     except (TypeError, ValueError):
-        return candle.time.second
-
-
-def is_wickless(candle: Candle) -> bool:
-    body = abs(candle.close - candle.open)
-    if body <= 0:
-        return False
-    tolerance = max(body * 0.02, 0.0000001)
-    upper_wick = abs(candle.high - max(candle.open, candle.close))
-    lower_wick = abs(min(candle.open, candle.close) - candle.low)
-    return upper_wick <= tolerance and lower_wick <= tolerance
+        return candle.update_time.second
 
 
 def moving_average_snapshot(asset: Asset, period: int = MOVING_AVERAGE_PERIOD) -> dict:
@@ -102,21 +85,13 @@ def moving_average_snapshot(asset: Asset, period: int = MOVING_AVERAGE_PERIOD) -
     current = moving_average(asset.candles, period)
     previous = None
     if len(closed) > period:
-        previous_closes = [candle.close for candle in closed[-period - 1 : -1]]
-        previous = sum(previous_closes) / period
+        previous = sum(candle.close for candle in closed[-period - 1 : -1]) / period
 
     last = closed[-1] if closed else asset.current_candle
     close = last.close if last else None
     distance = close - current if close is not None and current is not None else None
     slope = current - previous if current is not None and previous is not None else None
-    if slope is None:
-        trend = "AGUARDANDO"
-    elif slope > 0:
-        trend = "SUBINDO"
-    elif slope < 0:
-        trend = "DESCENDO"
-    else:
-        trend = "LATERAL"
+    trend = "AGUARDANDO" if slope is None else "SUBINDO" if slope > 0 else "DESCENDO" if slope < 0 else "LATERAL"
     position = "AGUARDANDO"
     if distance is not None:
         position = "ACIMA" if distance > 0 else "ABAIXO" if distance < 0 else "NA MEDIA"
@@ -141,7 +116,6 @@ def describe_latest_sequence(asset: Asset) -> tuple[str | None, int, str]:
     last_color = candle_color(candles[-1])
     if last_color == "DOJI":
         return "DOJI", 1, "DOJI"
-
     count = 0
     for candle in reversed(candles):
         if candle_color(candle) != last_color:
@@ -151,29 +125,10 @@ def describe_latest_sequence(asset: Asset) -> tuple[str | None, int, str]:
     return last_color, count, f"{count} {label}"
 
 
-def describe_strategy_watch(asset: Asset) -> str:
-    closed = [candle for candle in asset.candles if candle.closed]
-    if not closed:
-        return "Aguardando candles"
-
-    ma21 = moving_average_at(closed, len(closed) - 1)
-    if ma21 is None:
-        return "Aguardando MA21 real"
-
-    last = closed[-1]
-    if candle_color(last) != "RED":
-        return "Aguardando candle vermelho"
-    if last.close >= ma21:
-        return "Vermelho ainda acima da MA21"
-    if candle_close_second(last) > 33:
-        return "Vermelho abaixo da MA21 fechou depois dos 33s"
-    return "Estrategia 01 armada: vermelho abaixo da MA21 ate 33s"
-
-
 def detect_strategy_01_red_below_ma21_before_33(asset: Asset) -> tuple[str | None, str, str | None]:
     closed = [candle for candle in asset.candles if candle.closed]
-    if len(closed) < MOVING_AVERAGE_PERIOD:
-        return None, f"Aguardando {MOVING_AVERAGE_PERIOD} candles para MA21 real", None
+    if len(closed) < MOVING_AVERAGE_PERIOD + 1:
+        return None, f"Aguardando {MOVING_AVERAGE_PERIOD + 1} candles para MA21 real", None
 
     anchor_index = len(closed) - 1
     anchor = closed[anchor_index]
@@ -182,12 +137,10 @@ def detect_strategy_01_red_below_ma21_before_33(asset: Asset) -> tuple[str | Non
         return None, "Estrategia 01 aguarda candle vermelho fechado", color
 
     ma21 = moving_average_at(closed, anchor_index)
-    if ma21 is None:
+    slope = moving_average_slope_at(closed, anchor_index)
+    if ma21 is None or slope is None:
         return None, "Aguardando MA21 real", color
-    ma21_slope = moving_average_slope_at(closed, anchor_index)
-    if ma21_slope is None:
-        return None, "Aguardando inclinacao da MA21 real", color
-    if ma21_slope >= 0:
+    if slope >= 0:
         return None, "MA21 real nao esta apontando para baixo", color
     if anchor.close >= ma21:
         return None, "Candle vermelho fechou acima da MA21", color
@@ -203,410 +156,81 @@ def detect_strategy_01_red_below_ma21_before_33(asset: Asset) -> tuple[str | Non
         anchor_body * STRATEGY_01_PULLBACK_BODY_RATIO,
         abs(anchor.close) * STRATEGY_01_MIN_PULLBACK_PRICE_RATIO,
     )
-    pullback = current.close - current.open
-    if pullback < minimum_pullback:
+    if current.close - current.open < minimum_pullback:
         return None, "Estrategia 01 armada: aguardando repique para vender melhor", color
 
-    pattern = (
+    return (
+        "PUT",
         "Estrategia 01: candle vermelho fechou abaixo da media movel real de 21 "
-        "ate 33s; aguardou repique do candle seguinte para vender melhor; PUT com entrada e G1 se necessario"
+        "ate 33s; aguardou repique do candle seguinte para vender melhor; "
+        "PUT com entrada e G1 se necessario",
+        color,
     )
-    return "PUT", pattern, color
 
 
-def describe_ma21_watch(closed: list[Candle]) -> str | None:
-    if len(closed) < MOVING_AVERAGE_PERIOD:
-        return None
-
-    last = closed[-1]
-    last_index = len(closed) - 1
-    ma21 = moving_average_at(closed, last_index)
-    if ma21 is None:
-        return None
-
-    if candle_color(last) == "GREEN" and last.close > ma21:
-        if candle_close_second(last) > 33:
-            return "Compra no 33 armada"
-        return "Verde acima MA21 - aguardando fechar apos 33s"
-
-    if len(closed) >= MOVING_AVERAGE_PERIOD + 1:
-        for green_count in range(1, 4):
-            size = green_count + 1
-            if len(closed) < size:
-                continue
-            tail = closed[-size:]
-            colors = [candle_color(candle) for candle in tail]
-            if colors == ["RED"] + ["GREEN"] * green_count:
-                anchor_index = len(closed) - size
-                anchor = closed[anchor_index]
-                anchor_ma21 = moving_average_at(closed, anchor_index)
-                if (
-                    anchor_ma21 is not None
-                    and is_wickless(anchor)
-                    and candle_close_second(anchor) <= 33
-                    and anchor.close < anchor_ma21
-                ):
-                    return f"MA21 contra: {green_count}/4 verdes"
-    return None
-
-
-def red_breaks_ma21_down(candles: list[Candle], index: int) -> bool:
-    if index < 0 or index >= len(candles):
-        return False
-    candle = candles[index]
-    if candle_color(candle) != "RED":
-        return False
-    ma21 = moving_average_at(candles, index)
-    return ma21 is not None and candle.open >= ma21 and candle.close < ma21
-
-
-def green_breaks_ma21_up(candles: list[Candle], index: int) -> bool:
-    if index < 0 or index >= len(candles):
-        return False
-    candle = candles[index]
-    if candle_color(candle) != "GREEN":
-        return False
-    ma21 = moving_average_at(candles, index)
-    return ma21 is not None and candle.open <= ma21 and candle.close > ma21
-
-
-def previous_same_color_count(candles: list[Candle], index: int, color: str) -> int:
-    count = 0
-    for candle in reversed(candles[:index]):
-        if candle_color(candle) != color:
-            break
-        count += 1
-    return count
-
-
-def describe_ma21_break_33_watch(asset: Asset) -> str | None:
+def detect_strategy_05_green_above_previous_ma21_after_33(asset: Asset) -> tuple[str | None, str, str | None]:
     closed = [candle for candle in asset.candles if candle.closed]
+    if len(closed) < MOVING_AVERAGE_PERIOD:
+        return None, f"Aguardando {MOVING_AVERAGE_PERIOD} candles para MA21 real", None
+
     current = asset.current_candle
-    if not current or current.closed or not closed:
-        return None
-    if green_breaks_ma21_up(closed, len(closed) - 1):
-        if getattr(current, "negative_at_33", False):
-            return "MA21 rompida para cima - candle negativo aos 33s, aguardando fechar verde"
-        current_second = int(current.update_timestamp or current.timestamp) - int(current.timestamp)
-        if current_second < 33:
-            return "MA21 rompida para cima - aguardando candle ficar negativo aos 33s"
-        if current.close < current.open:
-            return "MA21 rompida para cima - candle negativo aos 33s"
-        return "MA21 rompida para cima - aguardando fechamento verde"
-    if not red_breaks_ma21_down(closed, len(closed) - 1):
-        return None
-    if getattr(current, "positive_at_33", False):
-        return "MA21 rompida - candle verde aos 33s, aguardando fechar vermelho"
-    current_second = int(current.update_timestamp or current.timestamp) - int(current.timestamp)
-    if current_second < 33:
-        return "MA21 rompida - aguardando candle ficar verde aos 33s"
-    if current.close > current.open:
-        return "MA21 rompida - candle verde aos 33s"
-    return "MA21 rompida - aguardando fechamento vermelho"
+    if current is None or current.closed:
+        return None, "Estrategia 05 aguarda candle atual em tempo real", None
 
+    color = candle_color(current)
+    if color != "GREEN":
+        return None, "Estrategia 05 aguarda candle positivo verde", color
 
-def detect_eight_candle_reversal(asset: Asset) -> tuple[str | None, str, str | None]:
-    closed = [candle for candle in asset.candles if candle.closed]
-    minimum = TREND_SEQUENCE_MIN + REVERSAL_CONFIRMATION_CANDLES
-    if len(closed) < minimum:
-        return None, f"Aguardando {minimum} candles", None
+    previous = closed[-1]
+    if int(current.timestamp) <= int(previous.timestamp):
+        return None, "Estrategia 05 aguarda o candle seguinte ao anterior", color
+    if current.close <= previous.close:
+        return None, "Estrategia 05: verde ainda nao esta acima do fechamento anterior", color
 
-    colors = [candle_color(candle) for candle in closed]
-    if colors[-1] == "DOJI":
-        return None, "Aguardando candle sem DOJI", "DOJI"
-
-    reversal_color = colors[-1]
-    reversal_count = 0
-    for color in reversed(colors):
-        if color != reversal_color:
-            break
-        reversal_count += 1
-
-    if reversal_count != REVERSAL_CONFIRMATION_CANDLES:
-        return None, "Aguardando segunda vela da reversao", reversal_color
-
-    previous_color = "RED" if reversal_color == "GREEN" else "GREEN"
-    previous_count = 0
-    for color in reversed(colors[:-reversal_count]):
-        if color != previous_color:
-            break
-        previous_count += 1
-
-    if previous_count < TREND_SEQUENCE_MIN:
-        return None, "Aguardando 8 candles antes da reversao", reversal_color
-
-    direction = "PUT" if previous_color == "GREEN" else "CALL"
-    previous_label = "verdes" if previous_color == "GREEN" else "vermelhos"
-    reversal_label = "vermelhos" if reversal_color == "RED" else "verdes"
-    pattern = (
-        f"Estrategia 01: 8 candles {previous_label} seguidos; "
-        f"reversao com 2 {reversal_label}; operar {direction} contra a tendencia com entrada, G1 e G2"
-    )
-    return direction, pattern, reversal_color
-
-
-def detect_eight_candle_sequence(asset: Asset) -> tuple[str | None, str, str | None]:
-    color, count, _sequence = describe_latest_sequence(asset)
-    if color == "DOJI":
-        return None, "Aguardando candle sem DOJI", color
-    if not color or count < TREND_SEQUENCE_MIN:
-        return None, "Aguardando 8 candles seguidos", color
-
-    direction = "PUT" if color == "GREEN" else "CALL"
-    label = "verdes" if color == "GREEN" else "vermelhos"
-    pattern = (
-        f"Estrategia 01: {TREND_SEQUENCE_MIN} candles {label} seguidos; "
-        f"operar {direction} contra a tendencia com entrada, G1 e G2"
-    )
-    return direction, pattern, color
-
-
-def detect_strategy_03_green_reversal_call(asset: Asset) -> tuple[str | None, str, str | None]:
-    closed = [candle for candle in asset.candles if candle.closed]
-    target_count = TREND_SEQUENCE_MIN + STRATEGY_03_REVERSAL_CANDLES
-    if len(closed) < target_count:
-        return None, f"Aguardando {target_count} candles", None
-
-    colors = [candle_color(candle) for candle in closed]
-    if colors[-1] == "DOJI":
-        return None, "Aguardando candle sem DOJI", "DOJI"
-
-    reversal_color = colors[-1]
-    reversal_count = 0
-    for color in reversed(colors):
-        if color != reversal_color:
-            break
-        reversal_count += 1
-
-    if reversal_color != "RED" or reversal_count != STRATEGY_03_REVERSAL_CANDLES:
-        return None, "Estrategia 03 aguarda 3 vermelhos depois dos 8 verdes", reversal_color
-
-    previous_count = 0
-    for color in reversed(colors[:-reversal_count]):
-        if color != "GREEN":
-            break
-        previous_count += 1
-
-    if previous_count < TREND_SEQUENCE_MIN:
-        return None, "Estrategia 03 aguarda 8 verdes antes dos 3 vermelhos", reversal_color
-
-    pattern = (
-        "Estrategia 03: 8 candles verdes seguidos; 9o candle vermelho + "
-        "mais 2 vermelhos; comprar CALL com entrada e G1 se der loss"
-    )
-    return "CALL", pattern, reversal_color
-
-
-def detect_strategy_04_green_red_green_red(asset: Asset) -> tuple[str | None, str, str | None]:
-    closed = [candle for candle in asset.candles if candle.closed]
-    if len(closed) < 4:
-        return None, "Estrategia 04 aguarda verde, vermelho, verde, vermelho", None
-
-    colors = [candle_color(candle) for candle in closed[-4:]]
-    if colors != ["GREEN", "RED", "GREEN", "RED"]:
-        return None, "Estrategia 04 aguarda verde, vermelho, verde, vermelho", colors[-1] if colors else None
-
-    pattern = (
-        "Estrategia 04: verde, vermelho, verde e vermelho; "
-        "ultimo candle terminou vermelho; compra CALL sem reentrada"
-    )
-    return "CALL", pattern, "RED"
-
-
-def detect_strategy_05_red_green_red_green(asset: Asset) -> tuple[str | None, str, str | None]:
-    closed = [candle for candle in asset.candles if candle.closed]
-    if len(closed) < 4:
-        return None, "Estrategia 05 aguarda vermelho, verde, vermelho, verde", None
-
-    colors = [candle_color(candle) for candle in closed[-4:]]
-    if colors != ["RED", "GREEN", "RED", "GREEN"]:
-        return None, "Estrategia 05 aguarda vermelho, verde, vermelho, verde", colors[-1] if colors else None
-
-    pattern = (
-        "Estrategia 05: vermelho, verde, vermelho e verde; "
-        "ultimo candle terminou verde; venda PUT sem reentrada"
-    )
-    return "PUT", pattern, "GREEN"
-
-
-def detect_ma21_red_wickless_green_continuation(asset: Asset) -> tuple[str | None, str, str | None]:
-    closed = [candle for candle in asset.candles if candle.closed]
-    pattern_size = 5
-    if len(closed) < MOVING_AVERAGE_PERIOD + 4:
-        return None, f"Aguardando {MOVING_AVERAGE_PERIOD + 4} candles para MA21", None
-
-    last_five = closed[-pattern_size:]
-    colors = [candle_color(candle) for candle in last_five]
-    if colors != ["RED", "GREEN", "GREEN", "GREEN", "GREEN"]:
-        return None, "Aguardando vermelho sem pavio + 4 verdes", colors[-1] if colors else None
-
-    anchor_index = len(closed) - pattern_size
-    anchor = closed[anchor_index]
-    ma21 = moving_average_at(closed, anchor_index)
+    ma21 = moving_average_at(closed, len(closed) - 1)
     if ma21 is None:
-        return None, "Aguardando MA21 real no candle sem pavio", "RED"
+        return None, "Aguardando MA21 real", color
+    if current.close <= ma21:
+        return None, "Estrategia 05: verde ainda nao esta acima da MA21", color
+    if candle_close_second(current) <= 33:
+        return None, "Estrategia 05: aguardando passar dos 33s", color
 
-    if not is_wickless(anchor):
-        return None, "Aguardando vermelho sem pavio", "RED"
-    if candle_close_second(anchor) > 33:
-        return None, "Vermelho sem pavio fechou depois de 33s", "RED"
-    if anchor.close >= ma21:
-        return None, "Vermelho sem pavio nao fechou abaixo da MA21", "RED"
-
-    pattern = (
-        "Vermelho sem pavio abaixo da MA21 fechado ate 33s + "
-        "4 verdes; operar contra tendencia nas velas 5, 6 e 7"
+    return (
+        "CALL",
+        "Estrategia 05: apos 33s o candle atual esta positivo verde, acima do fechamento "
+        "anterior e acima da media movel real de 21; CALL com entrada e G1 se necessario",
+        color,
     )
-    return "PUT", pattern, "GREEN"
 
 
-def detect_ma21_green_buy_at_33(asset: Asset) -> tuple[str | None, str, str | None]:
+def describe_strategy_watch(asset: Asset) -> str:
     closed = [candle for candle in asset.candles if candle.closed]
     if len(closed) < MOVING_AVERAGE_PERIOD:
-        return None, f"Aguardando {MOVING_AVERAGE_PERIOD} candles para MA21", None
-
-    anchor_index = len(closed) - 1
-    anchor = closed[anchor_index]
-    if candle_color(anchor) != "GREEN":
-        return None, "Aguardando candle verde acima da MA21", candle_color(anchor)
-
-    ma21 = moving_average_at(closed, anchor_index)
-    if ma21 is None:
-        return None, "Aguardando MA21 real no candle verde", "GREEN"
-    if anchor.close <= ma21:
-        return None, "Candle verde nao fechou acima da MA21", "GREEN"
-    if not green_breaks_ma21_up(closed, anchor_index):
-        return None, "Candle verde nao rompeu a MA21 para cima", "GREEN"
-    previous_green_count = previous_same_color_count(closed, anchor_index, "GREEN")
-    if previous_green_count < 1:
-        return None, "Aguardando 1 ou 2 candles verdes antes do rompimento MA21", "GREEN"
-    if previous_green_count > 2:
-        return None, "Rompimento MA21 bloqueado: 3 ou mais verdes antes", "GREEN"
-    if candle_close_second(anchor) <= 33:
-        return None, "Candle verde fechou antes dos 33s", "GREEN"
-
-    pattern = (
-        "Verde rompeu a MA21 e terminou acima apos 33s; somente 1 ou 2 verdes antes; "
-        "comprar no segundo 33 com entrada e G1"
-    )
-    return "CALL", pattern, "GREEN"
-
-
-def detect_ma21_red_sell_at_33(asset: Asset) -> tuple[str | None, str, str | None]:
-    closed = [candle for candle in asset.candles if candle.closed]
-    if len(closed) < MOVING_AVERAGE_PERIOD:
-        return None, f"Aguardando {MOVING_AVERAGE_PERIOD} candles para MA21", None
-
-    anchor_index = len(closed) - 1
-    anchor = closed[anchor_index]
-    if candle_color(anchor) != "RED":
-        return None, "Aguardando candle vermelho abaixo da MA21", candle_color(anchor)
-
-    ma21 = moving_average_at(closed, anchor_index)
-    if ma21 is None:
-        return None, "Aguardando MA21 real no candle vermelho", "RED"
-    if anchor.close >= ma21:
-        return None, "Candle vermelho nao fechou abaixo da MA21", "RED"
-    if not red_breaks_ma21_down(closed, anchor_index):
-        return None, "Candle vermelho nao rompeu a MA21 para baixo", "RED"
-    previous_red_count = previous_same_color_count(closed, anchor_index, "RED")
-    if previous_red_count < 1:
-        return None, "Aguardando 1 ou 2 candles vermelhos antes do rompimento MA21", "RED"
-    if previous_red_count > 2:
-        return None, "Rompimento MA21 bloqueado: 3 ou mais vermelhos antes", "RED"
-    if candle_close_second(anchor) <= 33:
-        return None, "Candle vermelho fechou antes dos 33s", "RED"
-
-    pattern = (
-        "Vermelho rompeu a MA21 para baixo e terminou abaixo apos 33s; somente 1 ou 2 "
-        "candles negativos antes; operar vendido no segundo 33 com entrada e G1"
-    )
-    return "PUT", pattern, "RED"
-
-
-def detect_ma21_green_break_negative_33_green_close_call(asset: Asset) -> tuple[str | None, str, str | None]:
-    closed = [candle for candle in asset.candles if candle.closed]
-    if len(closed) < MOVING_AVERAGE_PERIOD + 1:
-        return None, f"Aguardando {MOVING_AVERAGE_PERIOD + 1} candles para rompimento MA21 e virada 33", None
-
-    anchor_index = len(closed) - 1
-    anchor = closed[anchor_index]
-    if candle_color(anchor) != "GREEN":
-        return None, "Aguardando candle fechar verde positivo", candle_color(anchor)
-    if not getattr(anchor, "negative_at_33", False):
-        return None, "Aguardando candle que estava negativo aos 33s", "GREEN"
-
-    break_index = anchor_index - 1
-    break_candle = closed[break_index]
-    if candle_color(break_candle) != "GREEN":
-        return None, "Aguardando candle verde antes da virada 33", candle_color(break_candle)
-
-    if moving_average_at(closed, break_index) is None:
-        return None, "Aguardando MA21 real no candle de rompimento", "GREEN"
-    if not green_breaks_ma21_up(closed, break_index):
-        return None, "Candle verde anterior nao rompeu a MA21 para cima", "GREEN"
-
-    pattern = (
-        "Candle verde rompeu a MA21 para cima; candle seguinte ficou negativo "
-        "aos 33s e fechou verde positivo; CALL com entrada e G1 se necessario"
-    )
-    return "CALL", pattern, "GREEN"
-
-
-def detect_ma21_red_break_positive_33_red_close_put(asset: Asset) -> tuple[str | None, str, str | None]:
-    closed = [candle for candle in asset.candles if candle.closed]
-    if len(closed) < MOVING_AVERAGE_PERIOD + 1:
-        return None, f"Aguardando {MOVING_AVERAGE_PERIOD + 1} candles para rompimento MA21 e virada 33", None
-
-    anchor_index = len(closed) - 1
-    anchor = closed[anchor_index]
-    if candle_color(anchor) != "RED":
-        return None, "Aguardando candle fechar vermelho negativo", candle_color(anchor)
-    if not getattr(anchor, "positive_at_33", False):
-        return None, "Aguardando candle que estava positivo aos 33s", "RED"
-
-    break_index = anchor_index - 1
-    break_candle = closed[break_index]
-    if candle_color(break_candle) != "RED":
-        return None, "Aguardando candle vermelho antes da virada 33", candle_color(break_candle)
-
-    if moving_average_at(closed, break_index) is None:
-        return None, "Aguardando MA21 real no candle de rompimento", "RED"
-    if not red_breaks_ma21_down(closed, break_index):
-        return None, "Candle vermelho anterior nao rompeu a MA21 para baixo", "RED"
-
-    pattern = (
-        "Candle vermelho rompeu a MA21 para baixo; candle seguinte ficou verde "
-        "aos 33s e fechou vermelho negativo; PUT com entrada e G1 se necessario"
-    )
-    return "PUT", pattern, "RED"
+        return "Aguardando MA21 real"
+    _direction, reason, _color = detect_strategy_05_green_above_previous_ma21_after_33(asset)
+    return reason
 
 
 def collect_strategy_signals(asset: Asset) -> list[Signal]:
     signals: list[Signal] = []
-
     detections = (
-        (detect_strategy_01_red_below_ma21_before_33, REVERSAL_WINDOW_SECONDS, 2, True),
-        (detect_eight_candle_reversal, REVERSAL_WINDOW_SECONDS, 3, False),
-        (detect_eight_candle_sequence, CONTINUATION_WINDOW_SECONDS, 3, False),
-        (detect_strategy_05_red_green_red_green, REVERSAL_WINDOW_SECONDS, 1, False),
+        (detect_strategy_01_red_below_ma21_before_33, True),
+        (detect_strategy_05_green_above_previous_ma21_after_33, True),
     )
-    for detector, window_seconds, max_entries, enter_on_signal in detections:
+    for detector, enter_on_signal in detections:
         direction, pattern, sequence_color = detector(asset)
-        if not direction:
-            continue
-        signals.append(
-            make_signal(
-                asset,
-                direction,
-                pattern,
-                sequence_color,
-                window_seconds,
-                max_entries=max_entries,
-                enter_on_signal=enter_on_signal,
+        if direction:
+            signals.append(
+                make_signal(
+                    asset,
+                    direction,
+                    pattern,
+                    sequence_color,
+                    REVERSAL_WINDOW_SECONDS,
+                    max_entries=2,
+                    enter_on_signal=enter_on_signal,
+                )
             )
-        )
-
     return signals
 
 
@@ -616,11 +240,11 @@ def is_allowed_strategy_signal(signal: Signal) -> bool:
 
 
 def generate_signal(asset: Asset) -> Signal | None:
-    latest_color, latest_count, latest_sequence = describe_latest_sequence(asset)
+    _latest_color, latest_count, latest_sequence = describe_latest_sequence(asset)
     asset.sequence = latest_sequence if latest_count else "Aguardando"
-    asset.signal = describe_strategy_watch(asset)
     signals = collect_strategy_signals(asset)
     if not signals:
+        asset.signal = describe_strategy_watch(asset)
         return None
     asset.signal = " | ".join(f"{signal.direction}: {signal.pattern}" for signal in signals)
     return signals[0]

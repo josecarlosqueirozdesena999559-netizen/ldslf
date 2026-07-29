@@ -134,5 +134,58 @@ class Strategy01RedBelowMa21Tests(unittest.TestCase):
         self.assertIsNone(generate_signal(asset))
 
 
+class Strategy05GreenAbovePreviousMa21Tests(unittest.TestCase):
+    def make_asset(self, previous: Candle, current: Candle) -> Asset:
+        candles = [flat_candle(index * 60) for index in range(20)]
+        candles.extend([previous, current])
+        return Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
+
+    def test_green_above_previous_and_ma21_after_33_calls_with_one_reentry(self) -> None:
+        previous = Candle(open=1.0, close=1.01, high=1.02, low=0.99, timestamp=20 * 60)
+        current = live_green_candle(21 * 60, open_price=1.01, close=1.20, update_second=34)
+
+        signal = generate_signal(self.make_asset(previous, current))
+
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal.direction, "CALL")
+        self.assertEqual(signal.max_entries, 2)
+        self.assertTrue(signal.enter_on_signal)
+        self.assertIn("Estrategia 05", signal.pattern)
+        self.assertIn("acima do fechamento anterior", signal.pattern)
+        self.assertIn("media movel real de 21", signal.pattern)
+        self.assertEqual(TradeExecutor.max_steps_for_signal(signal, BotSettings()), 1)
+
+    def test_no_signal_when_green_does_not_close_above_previous(self) -> None:
+        previous = Candle(open=1.0, close=1.25, high=1.26, low=0.99, timestamp=20 * 60)
+        current = live_green_candle(21 * 60, open_price=1.01, close=1.20, update_second=34)
+
+        self.assertIsNone(generate_signal(self.make_asset(previous, current)))
+
+    def test_no_signal_when_green_is_not_above_ma21(self) -> None:
+        candles = [
+            Candle(open=2.0, close=2.0, high=2.01, low=1.99, timestamp=index * 60)
+            for index in range(20)
+        ]
+        previous = Candle(open=0.8, close=0.9, high=0.91, low=0.79, timestamp=20 * 60)
+        current = Candle(
+            open=0.9,
+            close=1.0,
+            high=1.01,
+            low=0.89,
+            timestamp=21 * 60,
+            update_timestamp=21 * 60 + 34,
+            closed=False,
+        )
+        asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles + [previous, current])
+
+        self.assertIsNone(generate_signal(asset))
+
+    def test_no_signal_when_green_closes_at_33_seconds(self) -> None:
+        previous = Candle(open=1.0, close=1.01, high=1.02, low=0.99, timestamp=20 * 60)
+        current = live_green_candle(21 * 60, open_price=1.01, close=1.20, update_second=33)
+
+        self.assertIsNone(generate_signal(self.make_asset(previous, current)))
+
+
 if __name__ == "__main__":
     unittest.main()

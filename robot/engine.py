@@ -614,22 +614,8 @@ class RobotEngine:
             return "estrategia 01"
         if "estrategia 02" in pattern:
             return "estrategia 02"
-        if "estrategia 03" in pattern:
-            return "estrategia 03"
-        if "estrategia 04" in pattern:
-            return "estrategia 04"
         if "estrategia 05" in pattern:
             return "estrategia 05"
-        if "velas 5, 6 e 7" in pattern:
-            return "ma21 wickless"
-        if "comprar no segundo 33" in pattern:
-            return "ma21 call 33"
-        if "operar vendido no segundo 33" in pattern:
-            return "ma21 put 33"
-        if "negativo aos 33s" in pattern:
-            return "ma21 negative 33"
-        if "verde aos 33s" in pattern:
-            return "ma21 positive 33"
         if "minutos sem 2 candles iguais" in pattern:
             return "estrategia 02"
         return pattern
@@ -639,20 +625,10 @@ class RobotEngine:
         pattern = (signal.pattern or "").lower()
         if "estrategia 02" in pattern or "minutos sem 2 candles iguais" in pattern or "par de cores atrasado" in pattern:
             return 95
-        if "rompeu a ma21" in pattern:
-            return 90
         if "estrategia 01" in pattern:
             return 88
-        if "comprar no segundo 33" in pattern:
-            return 85
-        if "estrategia 04" in pattern or "estrategia 05" in pattern:
+        if "estrategia 05" in pattern:
             return 82
-        if "velas 5, 6 e 7" in pattern:
-            return 80
-        if "estrategia 03" in pattern:
-            return 75
-        if "velas 3, 4 e 5" in pattern:
-            return 70
         return 50
 
     def signal_rank_key(self, asset, signal: Signal, elapsed_seconds: int = 0) -> tuple:

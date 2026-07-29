@@ -15,5 +15,5 @@ class BotSettings:
     scan_seconds: int = 3600
     pair_watch_minutes: int = 13
     enabled_strategies: list[str] = field(
-        default_factory=lambda: ["estrategia 01", "estrategia 02", "estrategia 03", "estrategia 04", "estrategia 05"]
+        default_factory=lambda: ["estrategia 01", "estrategia 02", "estrategia 05"]
     )

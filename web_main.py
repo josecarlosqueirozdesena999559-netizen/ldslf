@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 import time
 import json
+import logging
 import queue
 import uuid
 from dataclasses import replace
@@ -51,9 +52,9 @@ def today_key() -> str:
 
 
 STRATEGY_OPTIONS = (
-    ("estrategia 01", "Estrategia 01 - MA21 / 8 candles"),
+    ("estrategia 01", "Estrategia 01 - vermelho abaixo MA21 / 33s"),
     ("estrategia 02", "Estrategia 02 - 13min sem pares"),
-    ("estrategia 05", "Estrategia 05 - vermelho/verde/vermelho/verde"),
+    ("estrategia 05", "Estrategia 05 - verde acima / MA21 / 33s"),
 )
 STRATEGY_KEYS = {key for key, _label in STRATEGY_OPTIONS}
 DEFAULT_ENABLED_STRATEGIES = [key for key, _label in STRATEGY_OPTIONS]
@@ -406,26 +407,36 @@ class WebBot:
                 if not self.running or session_token != self.session_token:
                     return
 
-            if self.auto_trade and not self.operation_open:
-                signal = self.update_auto_strategies_and_find_signal()
-            elif self.operation_open:
-                self.update_candles()
-                self.update_focus_asset()
-                signal = self.last_signal
-            else:
-                self.update_candles()
-                self.update_focus_asset()
-                signal = self.find_best_signal()
-            with self.lock:
-                if not self.operation_open:
-                    self.last_signal = signal
-                    self.status = "Escaneando ativos em tempo real / aguardando sinal"
-            if signal and self.auto_trade and not self.operation_open:
-                if self.is_pair_watch_signal(signal):
-                    self.start_pair_watch_trade(signal)
+            try:
+                if not self.client or not self.client.api or not self.client.api.check_connect():
+                    raise ConnectionError("conexao com a BullEx foi encerrada")
+                if self.auto_trade and not self.operation_open:
+                    signal = self.update_auto_strategies_and_find_signal()
+                elif self.operation_open:
+                    self.update_candles()
+                    self.update_focus_asset()
+                    signal = self.last_signal
                 else:
-                    self.start_trade(signal)
-            self.refresh_account_if_due()
+                    self.update_candles()
+                    self.update_focus_asset()
+                    signal = self.find_best_signal()
+                with self.lock:
+                    if not self.operation_open:
+                        self.last_signal = signal
+                        self.status = "Escaneando ativos em tempo real / aguardando sinal"
+                if signal and self.auto_trade and not self.operation_open:
+                    if self.is_pair_watch_signal(signal):
+                        self.start_pair_watch_trade(signal)
+                    else:
+                        self.start_trade(signal)
+                self.refresh_account_if_due()
+            except Exception as exc:
+                logging.exception("[BOT_LOOP] falha durante analise/operacao")
+                with self.lock:
+                    self.running = False
+                    self.operation_open = False
+                    self.status = f"Robo interrompido: {exc}. Faca login novamente."
+                return
             time.sleep(BOT_LOOP_IDLE_SECONDS)
 
     def load_initial_candles(self) -> None:
@@ -629,20 +640,12 @@ class WebBot:
     @staticmethod
     def strategy_priority(signal: Signal) -> int:
         pattern = (signal.pattern or "").lower()
-        if "par de cores atrasado" in pattern:
+        if "estrategia 02" in pattern or "par de cores atrasado" in pattern:
             return 95
-        if "rompeu a ma21" in pattern:
-            return 90
-        if "comprar no segundo 33" in pattern:
-            return 85
-        if "velas 5, 6 e 7" in pattern:
-            return 80
-        if "estrategia 05" in pattern:
-            return 82
         if "estrategia 01" in pattern:
             return 88
-        if "velas 3, 4 e 5" in pattern:
-            return 70
+        if "estrategia 05" in pattern:
+            return 82
         return 50
 
     def find_best_signal(self) -> Signal | None:
@@ -1586,14 +1589,8 @@ class WebBot:
             return "estrategia 01"
         if "estrategia 02" in pattern:
             return "estrategia 02"
-        if "comprar no segundo 33" in pattern:
-            return "ma21 call 33"
-        if "operar vendido no segundo 33" in pattern:
-            return "ma21 put 33"
-        if "negativo aos 33s" in pattern:
-            return "ma21 negative 33"
-        if "verde aos 33s" in pattern:
-            return "ma21 positive 33"
+        if "estrategia 05" in pattern:
+            return "estrategia 05"
         if "minutos sem 2 candles iguais" in pattern:
             return "estrategia 02"
         return pattern
@@ -2120,22 +2117,10 @@ def strategy_name_from_pattern(pattern: str | None) -> str:
         return "Estrategia 05"
     if "estrategia 02" in lower:
         return "Estrategia 02"
-    if "estrategia 01" in lower or "8 candles" in lower or "8 velas" in lower:
+    if "estrategia 01" in lower:
         return "Estrategia 01"
     if "minutos sem 2 candles iguais" in lower or "par de cores atrasado" in lower or "pares 18min" in lower or "pares 13min" in lower:
-        return "Pares 13min"
-    if "velas 5, 6 e 7" in lower:
-        return "MA21 Sem Pavio"
-    if "comprar no segundo 33" in lower:
-        return "CALL MA21 33s"
-    if "operar vendido no segundo 33" in lower or "venda no 33" in lower:
-        return "PUT MA21 33s"
-    if "negativo aos 33s" in lower:
-        return "CALL MA21 Virada"
-    if "verde aos 33s" in lower:
-        return "PUT MA21 Virada"
-    if "ma21" in lower:
-        return "MA21"
+        return "Estrategia 02"
     return "Sem estrategia registrada"
 
 
