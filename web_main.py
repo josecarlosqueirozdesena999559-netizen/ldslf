@@ -26,6 +26,7 @@ from robot.risk import RiskManager
 from robot.strategy import (
     CANDLE_LOOKBACK,
     MOVING_AVERAGE_PERIOD,
+    STRATEGY_01_WATCH_TEXT,
     candle_color,
     generate_signal,
     is_allowed_strategy_signal,
@@ -41,6 +42,7 @@ MANUAL_ENTRIES_FILE = Path("data/manual_entries.json")
 SESSION_SCORE_FILE = Path("data/session_score.json")
 LOGIN_TIMEOUT_SECONDS = 35
 BOT_LOOP_IDLE_SECONDS = 0.20
+ASSET_REANALYSIS_COOLDOWN_SECONDS = 60
 
 
 def bullex_now() -> datetime:
@@ -51,11 +53,11 @@ def today_key() -> str:
     return bullex_now().strftime("%Y-%m-%d")
 
 
-STRATEGY_OPTIONS: tuple[tuple[str, str, str], ...] = (
+STRATEGY_OPTIONS = (
     (
         "estrategia 01",
-        "Estratégia 01",
-        "Após 33s e acima da MA21: vende acima do fechamento anterior e compra abaixo dele.",
+        "Estrategia 01 - rompimento da MA21 e virada no segundo 33",
+        "CALL: candle verde rompe a MA21 para cima; o candle seguinte fica negativo aos 33s e fecha verde positivo; entra CALL no inicio do proximo candle. PUT: candle vermelho rompe a MA21 para baixo; o candle seguinte fica verde aos 33s e fecha vermelho negativo; entra PUT no inicio do proximo candle. Usa entrada inicial e G1 se precisar.",
     ),
 )
 STRATEGY_KEYS = {key for key, _name, _movement in STRATEGY_OPTIONS}
@@ -224,6 +226,7 @@ class WebBot:
         self.operation_open = False
         self.used_signal_keys: set[tuple] = set()
         self.asset_signal_cooldowns: dict[str, int] = {}
+        self.asset_reanalysis_until: dict[str, float] = {}
         self.asset_strategy_cooldowns: dict[str, set[str]] = {}
         self.negative_at_33_marks: set[tuple[str, int]] = set()
         self.positive_at_33_marks: set[tuple[str, int]] = set()
@@ -295,9 +298,9 @@ class WebBot:
         with self.lock:
             if not self.client or not self.connected:
                 return False, "FaÃƒÂ§a login primeiro."
-            if auto_trade and not self.settings_saved:
-                self.status = "Salve as configuracoes antes de iniciar"
-                return False, "Salve as configuracoes antes de iniciar."
+            if not self.settings.enabled_strategies:
+                self.settings.enabled_strategies = list(DEFAULT_ENABLED_STRATEGIES)
+                self.settings_saved = True
             if self.running or self.starting:
                 if auto_trade and not self.auto_trade:
                     self.auto_trade = True
@@ -315,7 +318,10 @@ class WebBot:
             self.status = self.startup_message
 
         try:
-            assets = self.client.get_assets(self.settings.payout_min, limit=10_000)
+            assets = self.client.get_priority_assets_fast(self.settings.payout_min, limit=self.settings.asset_limit)
+            if not assets:
+                assets = self.client.get_assets(self.settings.payout_min, limit=self.settings.asset_limit)
+            assets = self.allowed_binary_assets(assets)
             if not assets:
                 with self.lock:
                     self.starting = False
@@ -325,8 +331,7 @@ class WebBot:
                 self.client.start_candles_stream(asset.name, self.settings.timeframe, CANDLE_LOOKBACK)
             with self.lock:
                 self.assets = assets
-                self.status = "Carregando estrategias..."
-            self.load_initial_candles()
+                self.status = "Escaneando ativos em tempo real / aguardando sinal"
         except Exception as exc:
             with self.lock:
                 self.starting = False
@@ -376,6 +381,7 @@ class WebBot:
             self.manual_paused = False
             self.operation_open = False
             self.used_signal_keys = set()
+            self.asset_reanalysis_until = {}
             self.negative_at_33_marks = set()
             self.positive_at_33_marks = set()
             self.pair_watch_states = {}
@@ -467,6 +473,12 @@ class WebBot:
             except Exception:
                 asset.candles = []
 
+    @staticmethod
+    def allowed_binary_assets(assets: list[Asset]) -> list[Asset]:
+        allowed = set(ASSET_PRIORITY)
+        by_name = {asset.name: asset for asset in assets if asset.name in allowed}
+        return [by_name[name] for name in ASSET_PRIORITY if name in by_name]
+
     def update_candles(self) -> None:
         update_payout = time.time() - self.last_payout_update >= 30
         if update_payout:
@@ -485,6 +497,9 @@ class WebBot:
         signals: list[tuple[Signal, tuple]] = []
         for asset in self.ordered_assets():
             self.update_asset_candles(asset, update_payout)
+            if self.is_asset_waiting_reanalysis(asset):
+                asset.signal = "Aguardando 1 minuto apos operacao"
+                continue
             if not asset.open or asset.payout < self.settings.payout_min:
                 asset.signal = "-"
                 continue
@@ -523,6 +538,9 @@ class WebBot:
         signals: list[tuple[Signal, tuple]] = []
         for asset in self.assets:
             self.update_asset_candles(asset, update_payout)
+            if self.is_asset_waiting_reanalysis(asset):
+                asset.signal = "Aguardando 1 minuto apos operacao"
+                continue
             if not asset.open or asset.payout < self.settings.payout_min:
                 asset.signal = "-"
                 if "estrategia 02" in self.settings.enabled_strategies:
@@ -675,6 +693,9 @@ class WebBot:
         signals = []
         for asset in self.assets:
             if asset.open and asset.payout >= self.settings.payout_min:
+                if self.is_asset_waiting_reanalysis(asset):
+                    asset.signal = "Aguardando 1 minuto apos operacao"
+                    continue
                 signal = generate_signal(asset)
                 if signal:
                     if not self.is_signal_strategy_enabled(signal):
@@ -893,6 +914,7 @@ class WebBot:
             if session_token != self.session_token:
                 return
             if trade:
+                self.pause_asset_reanalysis(signal)
                 self.strategy_02_next_trade_at = time.time() + self.settings.pair_watch_minutes * 60
                 self.mark_asset_signal_cooldown(signal)
                 self.mark_strategy_cooldown(signal)
@@ -921,6 +943,7 @@ class WebBot:
                 return
             cycle_trades = self.executor.last_cycle_trades if self.executor else []
             if trade and trade.result == "WIN":
+                self.pause_asset_reanalysis(signal)
                 self.mark_asset_signal_cooldown(signal)
                 self.mark_strategy_cooldown(signal)
                 self.add_session_cycle(cycle_trades or [trade], pattern=signal.pattern)
@@ -928,6 +951,7 @@ class WebBot:
                 self.save_session_score()
                 self.finish_cycle_after_trade()
             elif trade:
+                self.pause_asset_reanalysis(signal)
                 self.mark_asset_signal_cooldown(signal)
                 self.mark_strategy_cooldown(signal)
                 self.add_session_cycle(cycle_trades or [trade], pattern=signal.pattern)
@@ -964,6 +988,7 @@ class WebBot:
         self.session_results = []
         self.used_signal_keys = set()
         self.asset_signal_cooldowns = {}
+        self.asset_reanalysis_until = {}
         self.asset_strategy_cooldowns = {}
         self.pair_watch_states = {}
         self.pair_watch_respected = 0
@@ -1574,6 +1599,16 @@ class WebBot:
             return False
         return int(closed[-1].timestamp) <= cooldown_timestamp
 
+    def is_asset_waiting_reanalysis(self, asset: Asset) -> bool:
+        until = self.asset_reanalysis_until.get(asset.name, 0.0)
+        if until <= time.time():
+            self.asset_reanalysis_until.pop(asset.name, None)
+            return False
+        return True
+
+    def pause_asset_reanalysis(self, signal: Signal) -> None:
+        self.asset_reanalysis_until[signal.asset] = time.time() + ASSET_REANALYSIS_COOLDOWN_SECONDS
+
     def mark_asset_signal_cooldown(self, signal: Signal) -> None:
         asset = self.asset_by_name(signal.asset)
         if not asset:
@@ -1689,8 +1724,8 @@ class WebBot:
 
         return {
             "asset": None,
-            "title": "Escaneando Estratégia 01",
-            "detail": "Aguardando o segundo 33, preço acima da MA21 e comparação com o fechamento anterior.",
+            "title": "Escaneando Estrategia 01",
+            "detail": STRATEGY_01_WATCH_TEXT,
         }
 
     def state(self) -> dict:
@@ -1750,8 +1785,8 @@ class WebBot:
             "manual_paused": self.manual_paused,
             "settings_saved": self.settings_saved,
             "account": self.last_account,
-            "strategy": "",
-            "strategy_detail": "",
+            "strategy": "Estrategia 01",
+            "strategy_detail": STRATEGY_01_WATCH_TEXT,
             "strategy_moment": strategy_moment["title"] if robot_active else "",
             "strategy_moment_detail": strategy_moment["detail"] if robot_active else "",
             "target_sequence": self.active_strategy,

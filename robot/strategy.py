@@ -9,6 +9,11 @@ MOVING_AVERAGE_PERIOD = 21
 CANDLE_LOOKBACK = 30
 REVERSAL_WINDOW_SECONDS = 300
 STRATEGY_PATTERN_MARKERS = ("estrategia 01",)
+STRATEGY_01_WATCH_TEXT = (
+    "Estrategia 01: candle rompe a MA21; no candle seguinte observa o segundo 33. "
+    "Se ele ficou contra no 33s e fechou a favor do rompimento, entra no inicio do proximo candle "
+    "com apenas uma entrada e G1 se precisar."
+)
 
 
 def make_signal(
@@ -149,6 +154,54 @@ def detect_strategy_01_ma21_reversal_after_33(asset: Asset) -> tuple[str | None,
         "com apenas um G1 se necessário",
         candle_color(current),
     )
+
+
+def detect_strategy_01_ma21_reversal_after_33(asset: Asset) -> tuple[str | None, str, str | None]:
+    closed = [candle for candle in asset.candles if candle.closed]
+    if len(closed) < MOVING_AVERAGE_PERIOD + 1:
+        return None, f"Aguardando {MOVING_AVERAGE_PERIOD} candles fechados para calcular a MA21", None
+
+    current = asset.current_candle
+    if current is None:
+        return None, "Estrategia 01 aguardando candle em tempo real", None
+
+    breaker = closed[-2]
+    confirmation = closed[-1]
+    if int(current.timestamp) <= int(confirmation.timestamp):
+        return None, "Estrategia 01 aguardando nascer o proximo candle", candle_color(confirmation)
+
+    ma_before_breaker = moving_average_at(closed, len(closed) - 2)
+    if ma_before_breaker is None:
+        return None, "Aguardando calculo da MA21", candle_color(confirmation)
+
+    breaker_color = candle_color(breaker)
+    confirmation_color = candle_color(confirmation)
+    broke_up = breaker_color == "GREEN" and breaker.open <= ma_before_breaker and breaker.close > ma_before_breaker
+    broke_down = breaker_color == "RED" and breaker.open >= ma_before_breaker and breaker.close < ma_before_breaker
+
+    if broke_up:
+        if not getattr(confirmation, "negative_at_33", False):
+            return None, "Estrategia 01: candle verde rompeu a MA21 para cima; aguardando candle seguinte ficar negativo aos 33s", confirmation_color
+        if confirmation_color != "GREEN":
+            return None, "Estrategia 01: rompeu para cima, mas o candle seguinte nao fechou verde positivo", confirmation_color
+        return (
+            "CALL",
+            "Estrategia 01: candle verde rompeu a MA21 para cima; candle seguinte ficou negativo aos 33s e fechou verde positivo; CALL no inicio do proximo candle com G1 se precisar",
+            confirmation_color,
+        )
+
+    if broke_down:
+        if not getattr(confirmation, "positive_at_33", False):
+            return None, "Estrategia 01: candle vermelho rompeu a MA21 para baixo; aguardando candle seguinte ficar verde aos 33s", confirmation_color
+        if confirmation_color != "RED":
+            return None, "Estrategia 01: rompeu para baixo, mas o candle seguinte nao fechou vermelho negativo", confirmation_color
+        return (
+            "PUT",
+            "Estrategia 01: candle vermelho rompeu a MA21 para baixo; candle seguinte ficou verde aos 33s e fechou vermelho negativo; PUT no inicio do proximo candle com G1 se precisar",
+            confirmation_color,
+        )
+
+    return None, STRATEGY_01_WATCH_TEXT, confirmation_color
 
 
 def describe_strategy_watch(asset: Asset) -> str:

@@ -1408,16 +1408,16 @@
 
     .strategies-list {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-columns: 1fr;
       gap: 12px;
     }
 
     .strategy-item {
       display: grid;
       grid-template-columns: minmax(0, 1fr) auto;
-      align-items: center;
+      align-items: flex-start;
       gap: 16px;
-      min-height: 88px;
+      min-height: 96px;
       padding: 16px;
       border: 1px solid var(--panel-border);
       border-radius: 8px;
@@ -1437,6 +1437,7 @@
       color: var(--text-muted);
       font-size: 12px;
       line-height: 1.5;
+      overflow-wrap: anywhere;
     }
 
     .strategy-toggle {
@@ -3896,7 +3897,8 @@
       const running = Boolean(data?.running);
       const operating = running && Boolean(data?.auto_trade);
       const manualPaused = Boolean(data?.manual_paused);
-      const saved = Boolean(data?.settings_saved) && !settingsDirty;
+      const hasDefaultStrategy = Array.isArray(data?.settings?.enabled_strategies) && data.settings.enabled_strategies.length > 0;
+      const saved = (Boolean(data?.settings_saved) || hasDefaultStrategy) && !settingsDirty;
       
       $("btnStartBot").disabled = !ready || !saved || operating;
       $("btnPauseBot").disabled = !ready || !running;
