@@ -188,8 +188,9 @@ def detect_strategy_01_ma21_reversal_after_33(asset: Asset) -> tuple[str | None,
 
 
 def describe_strategy_watch(asset: Asset) -> str:
-    _direction, reason, _color = detect_strategy_01_ma21_reversal_after_33(asset)
-    return reason
+    _direction_01, reason_01, _color_01 = detect_strategy_01_ma21_reversal_after_33(asset)
+    _direction_02, reason_02, _color_02 = detect_strategy_02_above_ma21_after_33(asset)
+    return f"Estratégia 01: {reason_01} | Estratégia 02: {reason_02}"
 
 
 def detect_strategy_02_above_ma21_after_33(asset: Asset) -> tuple[str | None, str, str | None]:
@@ -224,7 +225,7 @@ def detect_strategy_02_above_ma21_after_33(asset: Asset) -> tuple[str | None, st
 
     return (
         "CALL",
-        "Estrategia 02: acima do candle anterior aos 33s; fechamento verde acima da MA21, do candle anterior e do preco dos 33s; CALL no proximo candle com G1 condicionado",
+        "Estrategia 02: acima do candle anterior aos 33s; fechamento verde acima da MA21, do candle anterior e do preco dos 33s; CALL no proximo candle com G1 automatico em caso de LOSS",
         candle_color(setup),
     )
 

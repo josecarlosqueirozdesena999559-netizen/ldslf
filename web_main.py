@@ -637,7 +637,7 @@ class WebBot:
             return
         elapsed = int(current.update_timestamp or time.time()) - int(current.timestamp)
         key = (asset.name, int(current.timestamp))
-        if elapsed == 33:
+        if 33 <= elapsed <= 36:
             self.price_at_33_marks.setdefault(key, current.close)
             current.price_at_33 = self.price_at_33_marks[key]
         previous = next(
@@ -645,14 +645,14 @@ class WebBot:
             None,
         )
         if (
-            elapsed == 33
+            33 <= elapsed <= 36
             and previous is not None
             and current.close < current.open
             and current.close < previous.close
         ):
             self.negative_at_33_marks.add(key)
             current.negative_at_33 = True
-        if elapsed == 33 and current.close > current.open:
+        if 33 <= elapsed <= 36 and current.close > current.open:
             self.positive_at_33_marks.add(key)
             current.positive_at_33 = True
 
@@ -1768,8 +1768,8 @@ class WebBot:
 
         return {
             "asset": None,
-            "title": "Escaneando Estrategia 01",
-            "detail": STRATEGY_01_WATCH_TEXT,
+            "title": "Escaneando Estratégias 01 e 02 por ativo",
+            "detail": "Cada ativo é analisado de forma independente e sem ordem fixa. O robô entra somente quando uma das estratégias confirma todos os seus critérios.",
         }
 
     def state(self) -> dict:
@@ -1829,8 +1829,11 @@ class WebBot:
             "manual_paused": self.manual_paused,
             "settings_saved": self.settings_saved,
             "account": self.last_account,
-            "strategy": "Estrategia 01",
-            "strategy_detail": STRATEGY_01_WATCH_TEXT,
+            "strategy": " / ".join(
+                name for key, name, _movement in STRATEGY_OPTIONS
+                if key in self.settings.enabled_strategies
+            ),
+            "strategy_detail": "Análise independente por ativo, sem ordem fixa entre as estratégias.",
             "strategy_moment": strategy_moment["title"] if robot_active else "",
             "strategy_moment_detail": strategy_moment["detail"] if robot_active else "",
             "target_sequence": self.active_strategy,

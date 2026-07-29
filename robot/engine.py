@@ -251,7 +251,7 @@ class RobotEngine:
             return
         elapsed = int(current.update_timestamp or time.time()) - int(current.timestamp)
         key = (asset.name, int(current.timestamp))
-        if elapsed == 33:
+        if 33 <= elapsed <= 36:
             self.price_at_33_marks.setdefault(key, current.close)
             current.price_at_33 = self.price_at_33_marks[key]
         previous = next(
@@ -259,14 +259,14 @@ class RobotEngine:
             None,
         )
         if (
-            elapsed == 33
+            33 <= elapsed <= 36
             and previous is not None
             and current.close < current.open
             and current.close < previous.close
         ):
             self.negative_at_33_marks.add(key)
             current.negative_at_33 = True
-        if elapsed == 33 and current.close > current.open:
+        if 33 <= elapsed <= 36 and current.close > current.open:
             self.positive_at_33_marks.add(key)
             current.positive_at_33 = True
 
