@@ -58,12 +58,17 @@ def today_key() -> str:
 STRATEGY_OPTIONS = (
     (
         "estrategia 01",
-        "Estrategia 01 - rompimento da MA21 e virada no segundo 33",
-        "CALL: candle verde rompe a MA21 para cima; o candle seguinte fica negativo aos 33s e fecha verde positivo; entra CALL no inicio do proximo candle. PUT: candle vermelho rompe a MA21 para baixo; o candle seguinte fica verde aos 33s e fecha vermelho negativo; entra PUT no inicio do proximo candle. Usa entrada inicial e G1 se precisar.",
+        "Estratégia 01 — Venda abaixo da MA21",
+        "Critérios operacionais: no segundo 33, o último candle em tempo real deve estar negativo e com o preço abaixo do fechamento do candle anterior. Após essa validação, o robô aguarda o encerramento do mesmo candle e confirma se ele fechou abaixo da média móvel de 21 períodos. A entrada PUT é realizada na abertura do candle seguinte, com no máximo uma reentrada. Regra de proteção: nenhuma operação é permitida se o candle fechar sobre ou acima da MA21.",
+    ),
+    (
+        "estrategia 02",
+        "Estratégia 02 — Compra acima da MA21",
+        "No segundo 33, o último candle em tempo real deve estar acima do fechamento do candle anterior. O mesmo candle precisa fechar verde, acima da média móvel de 21, acima do candle anterior e acima do preço registrado no segundo 33. A entrada CALL ocorre na abertura do próximo candle. Se houver LOSS, o G1 entra automaticamente na mesma direção, sem nova análise. Após o G1, o ciclo termina e o robô volta a aguardar uma nova confirmação completa.",
     ),
 )
 STRATEGY_KEYS = {key for key, _name, _movement in STRATEGY_OPTIONS}
-DEFAULT_ENABLED_STRATEGIES = ["estrategia 01"]
+DEFAULT_ENABLED_STRATEGIES = ["estrategia 01", "estrategia 02"]
 
 
 class LoginPayload(BaseModel):
@@ -233,6 +238,7 @@ class WebBot:
         self.asset_strategy_cooldowns: dict[str, set[str]] = {}
         self.negative_at_33_marks: set[tuple[str, int]] = set()
         self.positive_at_33_marks: set[tuple[str, int]] = set()
+        self.price_at_33_marks: dict[tuple[str, int], float] = {}
         self.last_payout_update = 0.0
         self.last_account_update = 0.0
         self.last_account = {"connected": False, "mode": "DEMO", "currency": "", "balance": 0.0}
@@ -301,9 +307,6 @@ class WebBot:
         with self.lock:
             if not self.client or not self.connected:
                 return False, "FaÃƒÂ§a login primeiro."
-            if not self.settings.enabled_strategies:
-                self.settings.enabled_strategies = list(DEFAULT_ENABLED_STRATEGIES)
-                self.settings_saved = True
             if self.running or self.starting:
                 if auto_trade and not self.auto_trade:
                     self.auto_trade = True
@@ -389,6 +392,7 @@ class WebBot:
             self.asset_ready_since = {}
             self.negative_at_33_marks = set()
             self.positive_at_33_marks = set()
+            self.price_at_33_marks = {}
             self.pair_watch_states = {}
             self.startup_message = ""
             self.status = "Aguardando login"
@@ -550,22 +554,9 @@ class WebBot:
                 continue
             if not asset.open or asset.payout < self.settings.payout_min:
                 asset.signal = "-"
-                if "estrategia 02" in self.settings.enabled_strategies:
-                    self.pair_watch_states[asset.name] = {
-                        "status": "Ativo fechado ou payout baixo",
-                        "alert": False,
-                        "last_colors": "-",
-                    }
                 continue
             if not self.asset_ready_for_real_analysis(asset):
                 continue
-
-            if "estrategia 02" in self.settings.enabled_strategies:
-                state = self.update_pair_watch_asset(asset, now, threshold_seconds)
-                if state.get("signal"):
-                    signal = state["signal"]
-                    state["signal"] = None
-                    signals.append((signal, self.signal_rank_key(asset, signal, int(state.get("elapsed_seconds", 0) or 0))))
 
             market_signal = generate_signal(asset)
             if not market_signal:
@@ -638,16 +629,30 @@ class WebBot:
                 candle.negative_at_33 = True
             if key in self.positive_at_33_marks:
                 candle.positive_at_33 = True
+            if key in self.price_at_33_marks:
+                candle.price_at_33 = self.price_at_33_marks[key]
 
         current = asset.current_candle
         if not current or current.closed:
             return
         elapsed = int(current.update_timestamp or time.time()) - int(current.timestamp)
         key = (asset.name, int(current.timestamp))
-        if elapsed >= 33 and current.close < current.open:
+        if elapsed == 33:
+            self.price_at_33_marks.setdefault(key, current.close)
+            current.price_at_33 = self.price_at_33_marks[key]
+        previous = next(
+            (candle for candle in reversed(asset.candles[:-1]) if candle.closed),
+            None,
+        )
+        if (
+            elapsed == 33
+            and previous is not None
+            and current.close < current.open
+            and current.close < previous.close
+        ):
             self.negative_at_33_marks.add(key)
             current.negative_at_33 = True
-        if elapsed >= 33 and current.close > current.open:
+        if elapsed == 33 and current.close > current.open:
             self.positive_at_33_marks.add(key)
             current.positive_at_33 = True
 
@@ -1573,7 +1578,7 @@ class WebBot:
     @staticmethod
     def is_pair_watch_signal(signal: Signal) -> bool:
         pattern = (signal.pattern or "").lower()
-        return "estrategia 02" in pattern or pattern.startswith("par de cores atrasado") or "minutos sem 2 candles iguais" in pattern
+        return pattern.startswith("par de cores atrasado") or "minutos sem 2 candles iguais" in pattern
 
     def refresh_account(self) -> None:
         try:

@@ -39,62 +39,46 @@ def strategy_asset(previous_close: float, current_close: float, second: int = 33
     return Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
 
 
-def strategy_01_asset(direction: str, mark_33: bool = True) -> Asset:
-    base = 1.0 if direction == "CALL" else 1.1
-    candles = [closed_candle(index * 60, base) for index in range(MOVING_AVERAGE_PERIOD)]
-    breaker_timestamp = MOVING_AVERAGE_PERIOD * 60
-    confirmation_timestamp = breaker_timestamp + 60
-    current_timestamp = confirmation_timestamp + 60
-    if direction == "CALL":
-        candles.append(
-            Candle(
-                open=1.0,
-                close=1.10,
-                high=1.10,
-                low=1.0,
-                timestamp=breaker_timestamp,
-                update_timestamp=breaker_timestamp + 59,
-                closed=True,
-            )
+def strategy_01_asset(mark_33: bool = True, setup_close: float = 0.90) -> Asset:
+    candles = [closed_candle(index * 60, 1.10) for index in range(MOVING_AVERAGE_PERIOD - 1)]
+    setup_timestamp = (MOVING_AVERAGE_PERIOD - 1) * 60
+    candles.append(
+        Candle(
+            open=1.05,
+            close=setup_close,
+            high=max(1.05, setup_close),
+            low=min(1.05, setup_close),
+            timestamp=setup_timestamp,
+            update_timestamp=setup_timestamp + 59,
+            closed=True,
+            negative_at_33=mark_33,
         )
-        candles.append(
-            Candle(
-                open=1.10,
-                close=1.20,
-                high=1.20,
-                low=1.08,
-                timestamp=confirmation_timestamp,
-                update_timestamp=confirmation_timestamp + 59,
-                closed=True,
-                negative_at_33=mark_33,
-            )
-        )
-    else:
-        candles.append(
-            Candle(
-                open=1.10,
-                close=1.0,
-                high=1.10,
-                low=1.0,
-                timestamp=breaker_timestamp,
-                update_timestamp=breaker_timestamp + 59,
-                closed=True,
-            )
-        )
-        candles.append(
-            Candle(
-                open=1.0,
-                close=0.90,
-                high=1.02,
-                low=0.90,
-                timestamp=confirmation_timestamp,
-                update_timestamp=confirmation_timestamp + 59,
-                closed=True,
-                positive_at_33=mark_33,
-            )
-        )
-    candles.append(live_candle(current_timestamp, candles[-1].close, 1))
+    )
+    candles.append(live_candle(setup_timestamp + 60, setup_close, 1))
     return Asset(name="EURUSD-OTC", active_id=1, payout=90, candles=candles)
+
+
+def strategy_02_asset(
+    price_at_33: float | None = 1.10,
+    setup_close: float = 1.20,
+    setup_open: float = 1.00,
+) -> Asset:
+    candles = [closed_candle(index * 60, 1.00) for index in range(MOVING_AVERAGE_PERIOD - 1)]
+    setup_timestamp = (MOVING_AVERAGE_PERIOD - 1) * 60
+    candles.append(
+        Candle(
+            open=setup_open,
+            close=setup_close,
+            high=max(setup_open, setup_close),
+            low=min(setup_open, setup_close),
+            timestamp=setup_timestamp,
+            update_timestamp=setup_timestamp + 59,
+            closed=True,
+            price_at_33=price_at_33,
+        )
+    )
+    candles.append(live_candle(setup_timestamp + 60, setup_close, 1))
+    return Asset(name="GBPUSD-OTC", active_id=2, payout=90, candles=candles)
 
 
 class Strategy01Ma21ReversalTests(unittest.TestCase):
@@ -103,29 +87,21 @@ class Strategy01Ma21ReversalTests(unittest.TestCase):
 
         self.assertAlmostEqual(moving_average(asset.candles), (20.0 + 1.21) / 21)
 
-    def test_green_breaks_ma21_and_next_turns_positive_buys_next_candle(self) -> None:
-        signal = generate_signal(strategy_01_asset("CALL"))
-
-        self.assertIsNotNone(signal)
-        self.assertEqual(signal.direction, "CALL")
-        self.assertTrue(signal.enter_on_signal)
-        self.assertEqual(signal.max_entries, 2)
-        self.assertIn("CALL no inicio do proximo candle", signal.pattern)
-        self.assertEqual(TradeExecutor.max_steps_for_signal(signal, BotSettings()), 1)
-
-    def test_red_breaks_ma21_and_next_turns_negative_sells_next_candle(self) -> None:
-        signal = generate_signal(strategy_01_asset("PUT"))
+    def test_negative_at_33_and_close_below_ma21_sells_next_candle(self) -> None:
+        signal = generate_signal(strategy_01_asset())
 
         self.assertIsNotNone(signal)
         self.assertEqual(signal.direction, "PUT")
         self.assertTrue(signal.enter_on_signal)
-        self.assertIn("PUT no inicio do proximo candle", signal.pattern)
+        self.assertEqual(signal.max_entries, 2)
+        self.assertIn("PUT na abertura do proximo candle", signal.pattern)
+        self.assertEqual(TradeExecutor.max_steps_for_signal(signal, BotSettings()), 1)
 
     def test_does_not_operate_without_second_33_mark(self) -> None:
-        self.assertIsNone(generate_signal(strategy_01_asset("CALL", mark_33=False)))
+        self.assertIsNone(generate_signal(strategy_01_asset(mark_33=False)))
 
-    def test_does_not_operate_at_or_below_ma21(self) -> None:
-        self.assertIsNone(generate_signal(strategy_asset(1.21, 1.0)))
+    def test_does_not_operate_when_setup_closes_above_ma21(self) -> None:
+        self.assertIsNone(generate_signal(strategy_01_asset(setup_close=1.20)))
 
     def test_does_not_operate_when_equal_to_previous_close(self) -> None:
         self.assertIsNone(generate_signal(strategy_asset(1.10, 1.10)))
@@ -136,6 +112,30 @@ class Strategy01Ma21ReversalTests(unittest.TestCase):
         asset = Asset(name="EURUSD", active_id=1, payout=90, candles=candles)
 
         self.assertIsNone(generate_signal(asset))
+
+
+class Strategy02AboveMa21Tests(unittest.TestCase):
+    def test_confirms_all_conditions_and_buys_next_candle(self) -> None:
+        signal = generate_signal(strategy_02_asset())
+
+        self.assertIsNotNone(signal)
+        self.assertEqual(signal.direction, "CALL")
+        self.assertIn("Estrategia 02", signal.pattern)
+        self.assertTrue(signal.enter_on_signal)
+        self.assertEqual(signal.max_entries, 2)
+        self.assertEqual(TradeExecutor.max_steps_for_signal(signal, BotSettings()), 1)
+
+    def test_rejects_without_exact_second_33_price(self) -> None:
+        self.assertIsNone(generate_signal(strategy_02_asset(price_at_33=None)))
+
+    def test_rejects_when_close_is_not_above_second_33_price(self) -> None:
+        self.assertIsNone(generate_signal(strategy_02_asset(price_at_33=1.20)))
+
+    def test_rejects_when_close_is_not_above_ma21(self) -> None:
+        self.assertIsNone(generate_signal(strategy_02_asset(price_at_33=0.95, setup_close=1.00)))
+
+    def test_rejects_red_candle(self) -> None:
+        self.assertIsNone(generate_signal(strategy_02_asset(price_at_33=1.10, setup_close=1.20, setup_open=1.25)))
 
 
 if __name__ == "__main__":

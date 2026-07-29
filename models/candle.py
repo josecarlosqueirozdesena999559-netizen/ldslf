@@ -21,6 +21,7 @@ class Candle:
     asset: str = ""
     negative_at_33: bool = False
     positive_at_33: bool = False
+    price_at_33: float | None = None
 
     @property
     def time(self) -> datetime:

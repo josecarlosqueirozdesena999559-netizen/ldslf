@@ -55,6 +55,7 @@ class RobotEngine:
         self.asset_strategy_cooldowns: dict[str, set[str]] = {}
         self.negative_at_33_marks: set[tuple[str, int]] = set()
         self.positive_at_33_marks: set[tuple[str, int]] = set()
+        self.price_at_33_marks: dict[tuple[str, int], float] = {}
         self.strategy_02_next_trade_at = 0.0
         self.trade_thread: threading.Thread | None = None
         self.scan_deadline = 0.0
@@ -167,19 +168,7 @@ class RobotEngine:
             self.update_asset_candles(asset, update_payout)
             if not asset.open or asset.payout < self.settings.payout_min:
                 asset.signal = "-"
-                if "estrategia 02" in self.settings.enabled_strategies:
-                    self.pair_watch_states[asset.name] = {
-                        "status": "Ativo fechado ou payout baixo",
-                        "alert": False,
-                    }
                 continue
-
-            if "estrategia 02" in self.settings.enabled_strategies:
-                state = self.update_pair_watch_asset(asset, now, threshold_seconds)
-                if state.get("signal"):
-                    signal = state["signal"]
-                    state["signal"] = None
-                    signals.append((signal, self.signal_rank_key(asset, signal, int(state.get("elapsed_seconds", 0) or 0))))
 
             market_signal = generate_signal(asset)
             if not market_signal:
@@ -254,16 +243,30 @@ class RobotEngine:
                 candle.negative_at_33 = True
             if key in self.positive_at_33_marks:
                 candle.positive_at_33 = True
+            if key in self.price_at_33_marks:
+                candle.price_at_33 = self.price_at_33_marks[key]
 
         current = getattr(asset, "current_candle", asset.candles[-1] if asset.candles else None)
         if not current or current.closed:
             return
         elapsed = int(current.update_timestamp or time.time()) - int(current.timestamp)
         key = (asset.name, int(current.timestamp))
-        if elapsed >= 33 and current.close < current.open:
+        if elapsed == 33:
+            self.price_at_33_marks.setdefault(key, current.close)
+            current.price_at_33 = self.price_at_33_marks[key]
+        previous = next(
+            (candle for candle in reversed(asset.candles[:-1]) if candle.closed),
+            None,
+        )
+        if (
+            elapsed == 33
+            and previous is not None
+            and current.close < current.open
+            and current.close < previous.close
+        ):
             self.negative_at_33_marks.add(key)
             current.negative_at_33 = True
-        if elapsed >= 33 and current.close > current.open:
+        if elapsed == 33 and current.close > current.open:
             self.positive_at_33_marks.add(key)
             current.positive_at_33 = True
 
@@ -559,7 +562,7 @@ class RobotEngine:
     @staticmethod
     def is_pair_watch_signal(signal: Signal) -> bool:
         pattern = (signal.pattern or "").lower()
-        return "estrategia 02" in pattern or pattern.startswith("par de cores atrasado") or "minutos sem 2 candles iguais" in pattern
+        return pattern.startswith("par de cores atrasado") or "minutos sem 2 candles iguais" in pattern
 
     @staticmethod
     def signal_key(asset, signal: Signal) -> tuple:

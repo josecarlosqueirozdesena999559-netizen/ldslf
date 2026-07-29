@@ -8,11 +8,13 @@ from models.trade import Signal
 MOVING_AVERAGE_PERIOD = 21
 CANDLE_LOOKBACK = 30
 REVERSAL_WINDOW_SECONDS = 300
-STRATEGY_PATTERN_MARKERS = ("estrategia 01",)
+STRATEGY_PATTERN_MARKERS = ("estrategia 01", "estrategia 02")
 STRATEGY_01_WATCH_TEXT = (
-    "Estrategia 01: candle rompe a MA21; no candle seguinte observa o segundo 33. "
-    "Se ele ficou contra no 33s e fechou a favor do rompimento, entra no inicio do proximo candle "
-    "com apenas uma entrada e G1 se precisar."
+    "Estratégia 01 — Venda abaixo da MA21: no segundo 33, o último candle em tempo real deve "
+    "estar negativo e com o preço abaixo do fechamento do candle anterior. Após essa validação, "
+    "o robô aguarda o encerramento do mesmo candle e confirma se ele fechou abaixo da média móvel "
+    "de 21 períodos. A entrada PUT é realizada na abertura do candle seguinte, com no máximo uma "
+    "reentrada. Nenhuma operação é permitida se o candle fechar sobre ou acima da MA21."
 )
 
 
@@ -158,50 +160,31 @@ def detect_strategy_01_ma21_reversal_after_33(asset: Asset) -> tuple[str | None,
 
 def detect_strategy_01_ma21_reversal_after_33(asset: Asset) -> tuple[str | None, str, str | None]:
     closed = [candle for candle in asset.candles if candle.closed]
-    if len(closed) < MOVING_AVERAGE_PERIOD + 1:
+    if len(closed) < MOVING_AVERAGE_PERIOD:
         return None, f"Aguardando {MOVING_AVERAGE_PERIOD} candles fechados para calcular a MA21", None
 
     current = asset.current_candle
-    if current is None:
-        return None, "Estrategia 01 aguardando candle em tempo real", None
+    if current is None or current.closed:
+        return None, "Estrategia 01 aguardando o ultimo candle em tempo real", None
 
-    breaker = closed[-2]
-    confirmation = closed[-1]
-    if int(current.timestamp) <= int(confirmation.timestamp):
-        return None, "Estrategia 01 aguardando nascer o proximo candle", candle_color(confirmation)
+    setup = closed[-1]
+    if int(current.timestamp) <= int(setup.timestamp):
+        return None, "Estrategia 01 aguardando a abertura do proximo candle", candle_color(setup)
 
-    ma_before_breaker = moving_average_at(closed, len(closed) - 2)
-    if ma_before_breaker is None:
-        return None, "Aguardando calculo da MA21", candle_color(confirmation)
+    ma21 = moving_average_at(closed, len(closed) - 1)
+    if ma21 is None:
+        return None, "Aguardando calculo da MA21", candle_color(setup)
 
-    breaker_color = candle_color(breaker)
-    confirmation_color = candle_color(confirmation)
-    broke_up = breaker_color == "GREEN" and breaker.open <= ma_before_breaker and breaker.close > ma_before_breaker
-    broke_down = breaker_color == "RED" and breaker.open >= ma_before_breaker and breaker.close < ma_before_breaker
+    if not setup.negative_at_33:
+        return None, "Estrategia 01: no segundo 33, candle nao estava negativo e abaixo do fechamento anterior", candle_color(setup)
+    if setup.close >= ma21:
+        return None, "Estratégia 01 bloqueada: o candle não fechou abaixo da MA21", candle_color(setup)
 
-    if broke_up:
-        if not getattr(confirmation, "negative_at_33", False):
-            return None, "Estrategia 01: candle verde rompeu a MA21 para cima; aguardando candle seguinte ficar negativo aos 33s", confirmation_color
-        if confirmation_color != "GREEN":
-            return None, "Estrategia 01: rompeu para cima, mas o candle seguinte nao fechou verde positivo", confirmation_color
-        return (
-            "CALL",
-            "Estrategia 01: candle verde rompeu a MA21 para cima; candle seguinte ficou negativo aos 33s e fechou verde positivo; CALL no inicio do proximo candle com G1 se precisar",
-            confirmation_color,
-        )
-
-    if broke_down:
-        if not getattr(confirmation, "positive_at_33", False):
-            return None, "Estrategia 01: candle vermelho rompeu a MA21 para baixo; aguardando candle seguinte ficar verde aos 33s", confirmation_color
-        if confirmation_color != "RED":
-            return None, "Estrategia 01: rompeu para baixo, mas o candle seguinte nao fechou vermelho negativo", confirmation_color
-        return (
-            "PUT",
-            "Estrategia 01: candle vermelho rompeu a MA21 para baixo; candle seguinte ficou verde aos 33s e fechou vermelho negativo; PUT no inicio do proximo candle com G1 se precisar",
-            confirmation_color,
-        )
-
-    return None, STRATEGY_01_WATCH_TEXT, confirmation_color
+    return (
+        "PUT",
+        "Estrategia 01: candle negativo e abaixo do anterior aos 33s, com fechamento abaixo da MA21; PUT na abertura do proximo candle com uma reentrada se necessario",
+        candle_color(setup),
+    )
 
 
 def describe_strategy_watch(asset: Asset) -> str:
@@ -209,9 +192,49 @@ def describe_strategy_watch(asset: Asset) -> str:
     return reason
 
 
+def detect_strategy_02_above_ma21_after_33(asset: Asset) -> tuple[str | None, str, str | None]:
+    closed = [candle for candle in asset.candles if candle.closed]
+    if len(closed) < MOVING_AVERAGE_PERIOD:
+        return None, f"Aguardando {MOVING_AVERAGE_PERIOD} candles fechados para calcular a MA21", None
+
+    current = asset.current_candle
+    if current is None or current.closed:
+        return None, "Estrategia 02 aguardando o ultimo candle em tempo real", None
+
+    setup = closed[-1]
+    if int(current.timestamp) <= int(setup.timestamp):
+        return None, "Estrategia 02 aguardando a abertura do proximo candle", candle_color(setup)
+
+    previous = closed[-2] if len(closed) >= 2 else None
+    ma21 = moving_average_at(closed, len(closed) - 1)
+    if previous is None or ma21 is None:
+        return None, "Estrategia 02 aguardando historico para validacao", candle_color(setup)
+    if setup.price_at_33 is None:
+        return None, "Estrategia 02: preco do segundo 33 nao foi confirmado", candle_color(setup)
+    if setup.price_at_33 <= previous.close:
+        return None, "Estrategia 02: no segundo 33, preco nao estava acima do candle anterior", candle_color(setup)
+    if candle_color(setup) != "GREEN":
+        return None, "Estrategia 02: candle nao fechou verde", candle_color(setup)
+    if setup.close <= ma21:
+        return None, "Estrategia 02 bloqueada: candle nao fechou acima da MA21", candle_color(setup)
+    if setup.close <= previous.close:
+        return None, "Estrategia 02: candle nao fechou acima do candle anterior", candle_color(setup)
+    if setup.close <= setup.price_at_33:
+        return None, "Estrategia 02: fechamento nao ficou acima do preco registrado no segundo 33", candle_color(setup)
+
+    return (
+        "CALL",
+        "Estrategia 02: acima do candle anterior aos 33s; fechamento verde acima da MA21, do candle anterior e do preco dos 33s; CALL no proximo candle com G1 condicionado",
+        candle_color(setup),
+    )
+
+
 def collect_strategy_signals(asset: Asset) -> list[Signal]:
     signals: list[Signal] = []
-    detections = ((detect_strategy_01_ma21_reversal_after_33, True),)
+    detections = (
+        (detect_strategy_01_ma21_reversal_after_33, True),
+        (detect_strategy_02_above_ma21_after_33, True),
+    )
     for detector, enter_on_signal in detections:
         direction, pattern, sequence_color = detector(asset)
         if direction:
