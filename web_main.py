@@ -43,6 +43,8 @@ SESSION_SCORE_FILE = Path("data/session_score.json")
 LOGIN_TIMEOUT_SECONDS = 35
 BOT_LOOP_IDLE_SECONDS = 0.20
 ASSET_REANALYSIS_COOLDOWN_SECONDS = 60
+ASSET_WARMUP_STABLE_SECONDS = 2
+ASSET_MAX_REALTIME_DELAY_SECONDS = 15
 
 
 def bullex_now() -> datetime:
@@ -227,6 +229,7 @@ class WebBot:
         self.used_signal_keys: set[tuple] = set()
         self.asset_signal_cooldowns: dict[str, int] = {}
         self.asset_reanalysis_until: dict[str, float] = {}
+        self.asset_ready_since: dict[str, float] = {}
         self.asset_strategy_cooldowns: dict[str, set[str]] = {}
         self.negative_at_33_marks: set[tuple[str, int]] = set()
         self.positive_at_33_marks: set[tuple[str, int]] = set()
@@ -314,6 +317,7 @@ class WebBot:
             self.stop_reason = ""
             self.active_strategy = ""
             self.next_strategy = ""
+            self.asset_ready_since = {}
             self.startup_message = "Carregando estrategias..."
             self.status = self.startup_message
 
@@ -382,6 +386,7 @@ class WebBot:
             self.operation_open = False
             self.used_signal_keys = set()
             self.asset_reanalysis_until = {}
+            self.asset_ready_since = {}
             self.negative_at_33_marks = set()
             self.positive_at_33_marks = set()
             self.pair_watch_states = {}
@@ -503,6 +508,8 @@ class WebBot:
             if not asset.open or asset.payout < self.settings.payout_min:
                 asset.signal = "-"
                 continue
+            if not self.asset_ready_for_real_analysis(asset):
+                continue
             signal = generate_signal(asset)
             if not signal:
                 self.clear_strategy_cooldown(asset)
@@ -550,6 +557,8 @@ class WebBot:
                         "last_colors": "-",
                     }
                 continue
+            if not self.asset_ready_for_real_analysis(asset):
+                continue
 
             if "estrategia 02" in self.settings.enabled_strategies:
                 state = self.update_pair_watch_asset(asset, now, threshold_seconds)
@@ -594,6 +603,33 @@ class WebBot:
                     self.mark_negative_at_33(asset)
         except Exception:
             pass
+
+    def asset_ready_for_real_analysis(self, asset: Asset) -> bool:
+        closed = [candle for candle in asset.candles if candle.closed]
+        current = asset.current_candle
+        if len(closed) < MOVING_AVERAGE_PERIOD + 1:
+            asset.signal = f"Aquecendo: aguardando {MOVING_AVERAGE_PERIOD + 1} candles reais para MA21"
+            self.asset_ready_since.pop(asset.name, None)
+            return False
+        if current is None or current.closed:
+            asset.signal = "Aquecendo: aguardando candle atual em tempo real"
+            self.asset_ready_since.pop(asset.name, None)
+            return False
+        current_update = int(current.update_timestamp or 0)
+        if not current_update or time.time() - current_update > ASSET_MAX_REALTIME_DELAY_SECONDS:
+            asset.signal = "Aquecendo: aguardando candle atual atualizar pela BullEx"
+            self.asset_ready_since.pop(asset.name, None)
+            return False
+        ma_value = moving_average_snapshot(asset).get("value")
+        if ma_value is None:
+            asset.signal = "Aquecendo: calculando media movel 21"
+            self.asset_ready_since.pop(asset.name, None)
+            return False
+        ready_since = self.asset_ready_since.setdefault(asset.name, time.time())
+        if time.time() - ready_since < ASSET_WARMUP_STABLE_SECONDS:
+            asset.signal = "Aquecendo: validando candles reais e MA21"
+            return False
+        return True
 
     def mark_negative_at_33(self, asset: Asset) -> None:
         for candle in asset.candles:
@@ -695,6 +731,8 @@ class WebBot:
             if asset.open and asset.payout >= self.settings.payout_min:
                 if self.is_asset_waiting_reanalysis(asset):
                     asset.signal = "Aguardando 1 minuto apos operacao"
+                    continue
+                if not self.asset_ready_for_real_analysis(asset):
                     continue
                 signal = generate_signal(asset)
                 if signal:
@@ -989,6 +1027,7 @@ class WebBot:
         self.used_signal_keys = set()
         self.asset_signal_cooldowns = {}
         self.asset_reanalysis_until = {}
+        self.asset_ready_since = {}
         self.asset_strategy_cooldowns = {}
         self.pair_watch_states = {}
         self.pair_watch_respected = 0
