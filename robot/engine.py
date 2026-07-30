@@ -251,24 +251,24 @@ class RobotEngine:
             return
         elapsed = int(current.update_timestamp or time.time()) - int(current.timestamp)
         key = (asset.name, int(current.timestamp))
-        if 33 <= elapsed <= 36:
-            self.price_at_33_marks.setdefault(key, current.close)
+        if elapsed >= 33 and key not in self.price_at_33_marks:
+            self.price_at_33_marks[key] = current.close
+            previous = next(
+                (candle for candle in reversed(asset.candles[:-1]) if candle.closed),
+                None,
+            )
+            if (
+                previous is not None
+                and current.close < current.open
+                and current.close < previous.close
+            ):
+                self.negative_at_33_marks.add(key)
+            if current.close > current.open:
+                self.positive_at_33_marks.add(key)
+        if key in self.price_at_33_marks:
             current.price_at_33 = self.price_at_33_marks[key]
-        previous = next(
-            (candle for candle in reversed(asset.candles[:-1]) if candle.closed),
-            None,
-        )
-        if (
-            33 <= elapsed <= 36
-            and previous is not None
-            and current.close < current.open
-            and current.close < previous.close
-        ):
-            self.negative_at_33_marks.add(key)
-            current.negative_at_33 = True
-        if 33 <= elapsed <= 36 and current.close > current.open:
-            self.positive_at_33_marks.add(key)
-            current.positive_at_33 = True
+        current.negative_at_33 = key in self.negative_at_33_marks
+        current.positive_at_33 = key in self.positive_at_33_marks
 
     def find_best_signal(self, mark_used: bool = True) -> Signal | None:
         signals: list[tuple[Signal, tuple]] = []
